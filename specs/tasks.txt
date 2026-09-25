@@ -1,3 +1,58 @@
+MVP de nota de cantoria (0 a 10) — dividido em 4 specs, na ordem de implementação.
+
+Visão: o usuário escolhe uma música (letra sincronizada vinda do LRCLIB, API pública), cola o
+link do YouTube dela uma única vez (ou, como alternativa, faz upload do arquivo de áudio), e a
+partir desse áudio extraímos a curva de pitch da voz original (referência). Depois qualquer pessoa
+canta por cima, com fone, informando só um nome (estilo fliperama, sem login), e recebe uma nota
+0–10 = 70% afinação + 30% entrada no tempo.
+O áudio é descartado após o processamento; só as features derivadas e o id do vídeo ficam no
+banco. Para tocar a música, o áudio é baixado de novo do YouTube sob demanda e fica em cache no
+navegador (IndexedDB).
+Projeto pessoal, sem fins comerciais (decisão do usuário em 2026-09-25): o download do YouTube
+com yt-dlp viola os termos do YouTube e só é aceito nesse contexto. Se o projeto for aberto ao
+público, isso precisa ser revisto.
+Fora do MVP: acerto de letra via Whisper, tempo por palavra, instrumental, login, fila/GPU.
+
+1. sdd-001-worker-pitch — novo app `apps/worker` (Python/FastAPI): recebe um arquivo de áudio
+   ou um id de vídeo do YouTube (baixado com yt-dlp), isola a voz (Demucs), extrai a curva de
+   pitch (torchcrepe) e devolve um PitchTrack (hop de 10 ms, MIDI por frame, null quando não há
+   voz). Também devolve o áudio de um vídeo para o navegador tocar. Stateless, apaga o áudio ao
+   final.
+
+2. sdd-002-scoring — função pura em `apps/api` que recebe PitchTrack de referência, PitchTrack
+   cantado e as linhas do LRC e devolve a nota: afinação em cents ignorando oitava, com
+   compensação de tom e tolerância de tempo; entrada no tempo por linha. Sem rota, sem banco.
+
+3. sdd-003-api-songs — rotas em `apps/api`: busca no LRCLIB, cadastro de música, referência a
+   partir de link do YouTube ou upload de arquivo (processamento assíncrono no worker), proxy
+   do áudio do YouTube para tocar, leitura da referência, envio de performance (nome do
+   jogador + curva cantada → nota) e ranking top 10 por música. Models Prisma `Song` e
+   `Performance`.
+
+4. sdd-004-web-karaoke — telas em `apps/web`: busca, preparação da música (link do YouTube ou
+   upload, status, nome, ranking), karaokê (música no fone, letra sincronizada, pitch ao vivo)
+   e resultado.
+
+---
+
+5. sdd-005-design-system — refatoração completa de `apps/web/DESIGN_SYSTEM/`: troca o DS
+   "Atrito" (monocromático, app de detox) pelo cantor.ia Design System, com visual inspirado em
+   anos 80, fliperama e Guitar Hero (a inspiração não aparece em texto da interface). Tokens,
+   componentes CSS `ct-*` para todas as telas do MVP (inclusive o fluxo do YouTube), ponte
+   Tailwind 4, vitrine e readme. Não integra no `apps/web` (isso é da sdd-004).
+   Implementado em 2026-09-25, antes da sdd-004.
+
+---
+
+6. sdd-006-env-config — padrão de nomes das variáveis de ambiente e um único `.env` na raiz
+   (catálogo versionado em `.env.example`, `pnpm env:init` gera os segredos). Cada app carrega
+   a raiz e valida só as suas variáveis; o compose repassa a cada container só o que é dele.
+   Implementar antes das sdd-001…004, que adicionam variáveis seguindo esse padrão.
+
+---
+
+Pendente (ainda não planejado — virará sdd-007):
+
 Adicionar endpoint de refresh token no fluxo de autenticação da API.
 
 Contexto: hoje o login (`apps/api/src/routes/auth.routes.ts` → `authService.login` em
