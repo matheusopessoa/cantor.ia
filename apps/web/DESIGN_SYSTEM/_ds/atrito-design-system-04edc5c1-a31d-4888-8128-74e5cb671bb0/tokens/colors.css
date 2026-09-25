@@ -1,0 +1,70 @@
+/* Atrito color system — strictly black & white.
+   No accent hues, ever. Hierarchy comes from value (light↔dark) and weight,
+   never from color. The only "color" is the amount of ink on paper. */
+
+:root {
+  /* ── Base ink scale (achromatic) ───────────────────────────── */
+  --ink-1000: #000000;   /* pure black — reserved, rare */
+  --ink-900:  #0a0a0a;   /* near-black — primary text, dark surfaces */
+  --ink-700:  #2e2e2e;   /* strong text on light */
+  --ink-500:  #6b6b6b;   /* secondary text */
+  --ink-400:  #909090;   /* tertiary / captions */
+  --ink-300:  #bcbcbc;   /* disabled text, faint marks */
+  --ink-200:  #dcdcdc;   /* borders, dividers */
+  --ink-100:  #ededed;   /* subtle fills, hover wash */
+  --ink-050:  #f5f5f4;   /* paper tint, resting surface */
+  --paper:    #ffffff;   /* pure white — primary background */
+
+  /* ── Semantic aliases — light theme (default) ──────────────── */
+  --bg-page:        var(--paper);
+  --bg-surface:     var(--paper);
+  --bg-sunken:      var(--ink-050);
+  --bg-wash:        var(--ink-100);   /* hover wash on light */
+  --bg-inverse:     var(--ink-900);   /* dark surfaces / intercept screens */
+
+  --text-primary:   var(--ink-900);
+  --text-secondary: var(--ink-500);
+  --text-tertiary:  var(--ink-400);
+  --text-disabled:  var(--ink-300);
+  --text-inverse:   var(--paper);
+  --text-inverse-secondary: rgba(255,255,255,0.62);
+
+  --border-strong:  var(--ink-900);
+  --border-default: var(--ink-200);
+  --border-subtle:  var(--ink-100);
+  --border-inverse: rgba(255,255,255,0.22);
+
+  /* Friction levels — distinguished by ink density, not hue.
+     Low friction = light/quiet, high friction = heavy/dark. */
+  --friction-low:    var(--ink-300);
+  --friction-medium: var(--ink-500);
+  --friction-high:   var(--ink-900);
+
+  /* Interaction overlays (achromatic, never colored) */
+  --overlay-hover:   rgba(0,0,0,0.04);
+  --overlay-press:   rgba(0,0,0,0.08);
+  --overlay-scrim:   rgba(0,0,0,0.55);   /* behind intercept dialogs */
+}
+
+/* ── Dark scope — the breath / intercept screens ─────────────── */
+.atrito-dark,
+[data-theme="dark"] {
+  --bg-page:        var(--ink-900);
+  --bg-surface:     var(--ink-900);
+  --bg-sunken:      #141414;
+  --bg-wash:        rgba(255,255,255,0.06);
+  --bg-inverse:     var(--paper);
+
+  --text-primary:   var(--paper);
+  --text-secondary: rgba(255,255,255,0.62);
+  --text-tertiary:  rgba(255,255,255,0.40);
+  --text-disabled:  rgba(255,255,255,0.24);
+  --text-inverse:   var(--ink-900);
+
+  --border-strong:  var(--paper);
+  --border-default: rgba(255,255,255,0.18);
+  --border-subtle:  rgba(255,255,255,0.10);
+
+  --overlay-hover:  rgba(255,255,255,0.06);
+  --overlay-press:  rgba(255,255,255,0.12);
+}

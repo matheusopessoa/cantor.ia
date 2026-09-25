@@ -1,0 +1,16 @@
+# docker-compose.yml (Base)
+services:
+  api:
+    build:
+      # Contexto na raiz: o pnpm-lock.yaml e o pnpm-workspace.yaml ficam aqui.
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "3333:3333"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports:
+      - "3000:3000"

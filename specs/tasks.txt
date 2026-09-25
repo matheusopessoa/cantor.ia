@@ -1,0 +1,8 @@
+Adicionar endpoint de refresh token no fluxo de autenticação da API.
+
+Contexto: hoje o login (`apps/api/src/routes/auth.routes.ts` → `authService.login` em
+`apps/api/src/services/auth.service.ts`) já assina um access token (15m) e um refresh token (7d)
+via @fastify/jwt, mas não existe rota para trocar o refresh token por um novo access token, e o
+refresh token não é persistido no model `Session` (que já existe em `prisma/schema.prisma`, sem
+uso). Resultado: quando o access token expira, o usuário precisa refazer login, e não há como
+revogar sessões.

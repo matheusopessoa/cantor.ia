@@ -1,0 +1,67 @@
+/* Atrito base element resets & primitives.
+   Minimal — sets the calm, papery default canvas. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body-lg);
+  line-height: var(--lh-normal);
+  font-weight: var(--fw-regular);
+  color: var(--text-primary);
+  background: var(--bg-page);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'ss01' on, 'cv01' on;
+}
+
+/* Headings — light & airy by default */
+h1, h2, h3, h4 {
+  margin: 0;
+  font-weight: var(--fw-regular);
+  letter-spacing: var(--ls-tight);
+  line-height: var(--lh-snug);
+  color: var(--text-primary);
+}
+h1 { font-size: var(--fs-h1); }
+h2 { font-size: var(--fs-h2); }
+h3 { font-size: var(--fs-h3); }
+
+p { margin: 0; }
+
+/* Eyebrow / micro-label utility — the recurring sparse uppercase mark */
+.atrito-eyebrow {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--ls-wider);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+/* Numeric / timer utility — the only place mono appears */
+.atrito-numeric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--ls-snug);
+}
+
+/* Wordmark */
+.atrito-wordmark {
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-wide);
+  text-transform: lowercase;
+}
+
+::selection { background: var(--ink-900); color: var(--paper); }
+
+button { font-family: inherit; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -1,0 +1,158 @@
+# .gitignore — cantor.ia (monorepo pnpm: apps/api + apps/web)
+# Padrões sem "/" no início valem em qualquer nível (raiz e apps/*).
+# ATENÇÃO: specs/ é versionado de propósito (SDD) — não adicionar aqui.
+
+# ─── Sistema operacional ─────────────────────────────────────────────
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.AppleDouble
+.LSOverride
+Icon?
+.Spotlight-V100
+.Trashes
+.fseventsd
+.TemporaryItems
+.DocumentRevisions-V100
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+desktop.ini
+$RECYCLE.BIN/
+*.lnk
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ─── Segredos e variáveis de ambiente ────────────────────────────────
+.env
+.env.*
+*.env
+# Exceções versionadas: exemplos sem segredos e o env da suíte de testes
+# (lido por apps/api/vitest.config.ts — só valores de teste, nunca segredos reais).
+!.env.example
+!.env.sample
+!apps/api/.env.test
+.cm-config.json
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+secrets/
+credentials*.json
+service-account*.json
+.npmrc
+.netrc
+
+# ─── Dependências ────────────────────────────────────────────────────
+node_modules/
+.pnpm-store/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+jspm_packages/
+bower_components/
+
+# ─── Build e artefatos gerados ───────────────────────────────────────
+dist/
+build/
+out/
+.next/
+.turbo/
+.vercel/
+.netlify/
+.cache/
+.parcel-cache/
+.swc/
+*.tsbuildinfo
+next-env.d.ts
+# Prisma Client gerado (pnpm --filter api db:generate)
+apps/api/src/generated/
+
+# ─── Testes e cobertura ──────────────────────────────────────────────
+coverage/
+.nyc_output/
+*.lcov
+junit.xml
+test-results/
+playwright-report/
+.vitest/
+
+# ─── Logs e processos ────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+lerna-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+*.pid
+*.pid.lock
+*.seed
+
+# ─── Banco de dados local ────────────────────────────────────────────
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.sql.gz
+pgdata/
+postgres-data/
+
+# ─── Docker ──────────────────────────────────────────────────────────
+docker-compose.override.yml
+docker-compose.override.yaml
+
+# ─── Editores e IDEs ─────────────────────────────────────────────────
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+.idea/
+*.iml
+*.swp
+*.swo
+*.sublime-workspace
+.history/
+.fleet/
+.zed/
+
+# ─── Ferramentas de IA (config local/pessoal) ────────────────────────
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
+graphify-out/
+
+# ─── Temporários ─────────────────────────────────────────────────────
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig
+*.rej

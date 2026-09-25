@@ -1,0 +1,56 @@
+/* Atrito spacing, radii, borders, shadow, motion.
+   Whitespace is the primary design material — the scale is generous and
+   slightly larger than typical. Motion is slow on purpose. */
+
+:root {
+  /* ── Spacing scale (4px base, but used sparingly & large) ───── */
+  --space-0:   0;
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   24px;
+  --space-6:   32px;
+  --space-7:   48px;
+  --space-8:   64px;
+  --space-9:   96px;
+  --space-10: 128px;   /* breath-screen vertical padding */
+
+  /* Semantic spacing */
+  --gutter-page:    var(--space-6);   /* screen edge padding (mobile) */
+  --gap-stack:      var(--space-5);   /* between stacked blocks */
+  --gap-section:    var(--space-9);   /* between major sections */
+
+  /* ── Radii — soft but restrained. Nothing pill-bubbly. ──────── */
+  --radius-none:  0;
+  --radius-sm:    8px;
+  --radius-md:    14px;    /* default card / control radius */
+  --radius-lg:    22px;    /* large surfaces, sheets */
+  --radius-pill:  999px;   /* circular timer rings, avatars only */
+
+  /* ── Borders — hairlines. Borders do most of the structural work
+       since there is little fill and almost no shadow. ─────────── */
+  --border-hair:   1px;
+  --border-medium: 1.5px;
+  --border-heavy:  2px;
+
+  /* ── Elevation — almost none. Atrito is flat & papery.
+       A single, very soft shadow exists for floating sheets only. ─ */
+  --shadow-none:  none;
+  --shadow-sheet: 0 2px 40px rgba(0,0,0,0.08);
+  --shadow-press: inset 0 0 0 1px rgba(0,0,0,0.06);
+
+  /* ── Motion — deliberately unhurried. Everything eases out slow.
+       No bounce, no spring, no urgency. ─────────────────────────── */
+  --ease-calm:    cubic-bezier(0.22, 0.61, 0.36, 1);   /* @kind other */
+  --ease-inout:   cubic-bezier(0.45, 0, 0.15, 1);      /* @kind other */
+
+  --dur-fast:     220ms;   /* @kind other */
+  --dur-base:     420ms;   /* @kind other */
+  --dur-slow:     700ms;   /* @kind other */
+  --dur-breath:   4000ms;  /* @kind other */
+
+  /* ── Layout ─────────────────────────────────────────────────── */
+  --content-max:  440px;   /* mobile-first column width */
+  --tap-min:      48px;    /* minimum hit target */
+}

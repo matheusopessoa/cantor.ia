@@ -1,0 +1,22 @@
+# Banco exclusivo da suíte de testes. Sobe isolado do compose de dev:
+#   docker compose -f docker-compose.test.yml up -d
+services:
+  db-test:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: feedback_test
+    # 5433 de propósito: na 5432 existe um Postgres nativo na máquina, e o bind
+    # em localhost vence o do Docker. Um TRUNCATE apontado para o banco errado
+    # apagaria dados reais.
+    ports:
+      - "5433:5432"
+    # Dados só em memória: a suíte fica mais rápida e não sobra volume sujo.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d feedback_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 15

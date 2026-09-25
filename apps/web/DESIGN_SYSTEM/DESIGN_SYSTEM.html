@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!--[CDATA[<sc-helmet-->
+  <link rel="stylesheet" href="_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/tokens/spacing.css">
+  <link rel="stylesheet" href="_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/tokens/base.css">
+  <link rel="stylesheet" href="_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/styles.css">
+  <script src="_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/_ds_bundle.js"></script>
+  <script src="./image-slot.js"></script>
+  <style>
+    a { color: var(--text-primary); }
+    a:hover { color: var(--text-secondary); }
+  </style>
+
+
+<div style="background:var(--bg-page);min-height:100vh;font-family:var(--font-sans);color:var(--text-primary);">
+
+  <!-- Header: empty logo slot, since this is a boilerplate -->
+  <div style="max-width: 960px; margin: 0 auto; padding: var(--space-9) var(--space-6) var(--space-8); display: flex; align-items: center; justify-content: space-between; gap: var(--space-6); border-bottom: var(--border-hair) solid var(--border-default)">
+    <div style="display:flex;align-items:center;gap:var(--space-4);">
+      <div style="width:48px;height:48px;flex:0 0 auto;">
+        <image-slot id="logo-mark" shape="rounded" radius="14" placeholder="Logo" style="width:48px;height:48px;"></image-slot>
+      </div>
+      <div>
+        <div class="atrito-wordmark" style="font-size:var(--fs-title);font-weight:var(--fw-bold);letter-spacing:var(--ls-tight);">your product</div>
+        <div class="atrito-eyebrow" style="margin-top:2px;">DESIGN SYSTEM BOILERPLATE</div>
+      </div>
+    </div>
+    <div style="font-size:var(--fs-sm);color:var(--text-secondary);text-align:right;">
+      Baseado no Atrito Design System<br>Monocromático · calmo · sem pressa
+    </div>
+  </div>
+
+  <div style="max-width:960px;margin:0 auto;padding:0 var(--space-6);">
+
+    <!-- Intro -->
+    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);">
+      <div class="atrito-eyebrow">COMEÇE AQUI</div>
+      <h1 style="font-size:var(--fs-h1);font-weight:var(--fw-light);letter-spacing:var(--ls-tight);line-height:var(--lh-tight);margin:var(--space-3) 0 0;max-width:640px;">
+        Um ponto de partida em preto e branco.
+      </h1>
+      <p style="font-size:var(--fs-body-lg);color:var(--text-secondary);line-height:var(--lh-relaxed);max-width:520px;margin-top:var(--space-4);">
+        Nenhuma cor de destaque, nenhum gradiente. Hierarquia vem de valor, peso e espaço — nunca de matiz. Substitua o texto e os componentes abaixo pelos do seu produto.
+      </p>
+    </section>
+
+    <!-- Colors -->
+    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);">
+      <div class="atrito-eyebrow">CORES</div>
+      <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:var(--space-2) 0 var(--space-6);">Escala de tinta</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:var(--space-3);">
+        <sc-for list="{{ inkSwatches }}" as="sw" hint-placeholder-count="10">
+          <div>
+            <div style="height:64px;border-radius:var(--radius-sm);border:var(--border-hair) solid var(--border-default);background:{{ sw.value }};"></div>
+            <div style="margin-top:var(--space-2);font-size:var(--fs-xs);color:var(--text-secondary);">{{ sw.name }}</div>
+            <div class="atrito-numeric" style="font-size:var(--fs-xs);color:var(--text-tertiary);">{{ sw.value }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- Typography -->
+    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);">
+      <div class="atrito-eyebrow">TIPOGRAFIA</div>
+      <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:var(--space-2) 0 var(--space-6);">Escala — Geist</h2>
+      <div style="display:flex;flex-direction:column;gap:var(--space-4);">
+        <sc-for list="{{ typeScale }}" as="t" hint-placeholder-count="6">
+          <div style="display:flex;align-items:baseline;gap:var(--space-5);border-bottom:var(--border-hair) solid var(--border-subtle);padding-bottom:var(--space-4);">
+            <div style="width:88px;flex:0 0 auto;font-size:var(--fs-xs);color:var(--text-tertiary);">{{ t.label }}</div>
+            <div style="font-size:{{ t.size }};font-weight:var(--fw-light);letter-spacing:var(--ls-tight);line-height:var(--lh-tight);">Notice the urge</div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- Spacing / radii -->
+    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);">
+      <div class="atrito-eyebrow">ESPAÇAMENTO &amp; RAIOS</div>
+      <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:var(--space-2) 0 var(--space-6);">O espaço em branco é o material</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:var(--space-5);align-items:flex-end;">
+        <sc-for list="{{ spaceScale }}" as="s" hint-placeholder-count="7">
+          <div style="text-align:center;">
+            <div style="width:{{ s.px }}px;height:{{ s.px }}px;background:var(--ink-900);border-radius:2px;"></div>
+            <div style="margin-top:var(--space-2);font-size:var(--fs-xs);color:var(--text-secondary);">{{ s.name }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:var(--space-5);margin-top:var(--space-7);">
+        <sc-for list="{{ radiusScale }}" as="r" hint-placeholder-count="4">
+          <div style="text-align:center;">
+            <div style="width:72px;height:72px;border:var(--border-medium) solid var(--border-strong);border-radius:{{ r.px }};"></div>
+            <div style="margin-top:var(--space-2);font-size:var(--fs-xs);color:var(--text-secondary);">{{ r.name }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- Buttons -->
+    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);">
+      <div class="atrito-eyebrow">COMPONENTES</div>
+      <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:var(--space-2) 0 var(--space-6);">Botões</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:var(--space-4);align-items:center;">
+        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Button" variant="solid" hint-size="auto,52px">Step away</x-import>
+        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Button" variant="outline" hint-size="auto,52px">Open anyway</x-import>
+        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Button" variant="ghost" hint-size="auto,52px">Ghost</x-import>
+        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Button" variant="quiet" hint-size="auto,52px">Quiet</x-import>
+        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.IconButton" label="Fechar" hint-size="48px,48px">×</x-import>
+      </div>
+    </section>
+
+    <!-- Badges + Stat -->
+    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);display:grid;grid-template-columns:1fr 1fr;gap:var(--space-8);">
+      <div>
+        <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:0 0 var(--space-5);">Badges</h2>
+        <div style="display:flex;flex-wrap:wrap;gap:var(--space-3);align-items:center;">
+          <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Badge" variant="soft" hint-size="auto,26px">Soft</x-import>
+          <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Badge" variant="outline" hint-size="auto,26px">Outline</x-import>
+          <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Badge" variant="solid" hint-size="auto,26px">Solid</x-import>
+          <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Badge" variant="eyebrow" hint-size="auto,20px">Eyebrow</x-import>
+        </div>
+      </div>
+      <div>
+        <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:0 0 var(--space-5);">Stat</h2>
+        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Stat" value="23" unit="opens" label="AVOIDED THIS WEEK" caption="Quietly, it adds up." hint-size="auto,auto"></x-import>
+      </div>
+    </section>
+
+    <!-- Cards -->
+    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);">
+      <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:0 0 var(--space-5);">Cards</h2>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-4);">
+        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Card" variant="default" hint-size="auto,120px">
+          <div style="font-size:var(--fs-sm);color:var(--text-secondary);">default</div>
+        </x-import>
+        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Card" variant="sunken" hint-size="auto,120px">
+          <div style="font-size:var(--fs-sm);color:var(--text-secondary);">sunken</div>
+        </x-import>
+        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Card" variant="inverse" hint-size="auto,120px">
+          <div style="font-size:var(--fs-sm);color:var(--text-inverse-secondary);">inverse</div>
+        </x-import>
+      </div>
+    </section>
+
+    <!-- Switch + Select -->
+    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);display:grid;grid-template-columns:1fr 1fr;gap:var(--space-8);">
+      <div>
+        <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:0 0 var(--space-5);">Switch</h2>
+        <div style="display:flex;align-items:center;gap:var(--space-4);">
+          <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Switch" checked="{{ switchOn }}" on-change="{{ setSwitch }}" hint-size="52px,30px"></x-import>
+          <span style="font-size:var(--fs-sm);color:var(--text-secondary);">{{ switchLabel }}</span>
+        </div>
+      </div>
+      <div>
+        <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:0 0 var(--space-5);">Seletor</h2>
+        <div style="display:inline-flex;border:var(--border-hair) solid var(--border-default);border-radius:var(--radius-sm);overflow:hidden;">
+          <sc-for list="{{ selectOptions }}" as="opt" hint-placeholder-count="3">
+            <button onClick="{{ opt.onClick }}" style="font-family:var(--font-sans);font-size:var(--fs-sm);padding:var(--space-3) var(--space-5);border:none;cursor:pointer;background:{{ opt.bg }};color:{{ opt.color }};" style-hover="{{ opt.hoverStyle }}">{{ opt.label }}</button>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+
+    <!-- Login -->
+    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);">
+      <div class="atrito-eyebrow">AUTENTICAÇÃO</div>
+      <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:var(--space-2) 0 var(--space-6);">Login</h2>
+      <div style="max-width:360px;display:flex;flex-direction:column;gap:var(--space-4);">
+        <div>
+          <label style="display:block;font-size:var(--fs-xs);color:var(--text-secondary);margin-bottom:var(--space-2);">E-mail</label>
+          <input type="email" placeholder="voce@exemplo.com" style="width:100%;box-sizing:border-box;font-family:var(--font-sans);font-size:var(--fs-sm);padding:var(--space-3) var(--space-4);border:var(--border-hair) solid var(--border-default);border-radius:var(--radius-sm);background:var(--bg-page);color:var(--text-primary);" />
+        </div>
+        <div>
+          <label style="display:block;font-size:var(--fs-xs);color:var(--text-secondary);margin-bottom:var(--space-2);">Senha</label>
+          <input type="password" placeholder="••••••••" style="width:100%;box-sizing:border-box;font-family:var(--font-sans);font-size:var(--fs-sm);padding:var(--space-3) var(--space-4);border:var(--border-hair) solid var(--border-default);border-radius:var(--radius-sm);background:var(--bg-page);color:var(--text-primary);" />
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <label style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--fs-xs);color:var(--text-secondary);cursor:pointer;">
+            <input type="checkbox" style="accent-color:var(--ink-900);" />
+            Lembrar de mim
+          </label>
+          <a href="#" style="font-size:var(--fs-xs);">Esqueceu a senha?</a>
+        </div>
+        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Button" variant="solid" hint-size="100%,52px">Entrar</x-import>
+        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Button" variant="outline" hint-size="100%,52px">Criar conta</x-import>
+      </div>
+    </section>
+
+    <!-- Comment card -->
+    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);">
+      <div class="atrito-eyebrow">SOCIAL</div>
+      <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:var(--space-2) 0 var(--space-6);">Card de comentário</h2>
+      <div style="display:flex;flex-direction:column;gap:var(--space-3);max-width:520px;">
+        <sc-for list="{{ comments }}" as="c" hint-placeholder-count="2">
+          <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Card" variant="default" hint-size="100%,auto">
+            <div style="display:flex;gap:var(--space-4);">
+              <image-slot id="{{ c.avatarId }}" shape="circle" placeholder="Foto" style="width:40px;height:40px;flex:0 0 auto;"></image-slot>
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:baseline;gap:var(--space-2);">
+                  <span style="font-size:var(--fs-sm);font-weight:var(--fw-medium);">{{ c.name }}</span>
+                  <span style="font-size:var(--fs-xs);color:var(--text-tertiary);">{{ c.time }}</span>
+                </div>
+                <p style="margin:var(--space-2) 0 0;font-size:var(--fs-sm);color:var(--text-secondary);line-height:var(--lh-relaxed);">{{ c.text }}</p>
+                <div style="margin-top:var(--space-3);display:flex;gap:var(--space-4);">
+                  <button style="background:none;border:none;padding:0;cursor:pointer;font-size:var(--fs-xs);color:var(--text-tertiary);">Responder</button>
+                  <button style="background:none;border:none;padding:0;cursor:pointer;font-size:var(--fs-xs);color:var(--text-tertiary);">Curtir</button>
+                </div>
+              </div>
+            </div>
+          </x-import>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- Onboarding screen example -->
+    <section style="padding:var(--space-8) 0;">
+      <div class="atrito-eyebrow">TELA DE EXEMPLO</div>
+      <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:var(--space-2) 0 var(--space-6);">Onboarding</h2>
+      <div style="max-width:340px;border:var(--border-hair) solid var(--border-default);border-radius:var(--radius-lg);overflow:hidden;">
+        <image-slot id="onboarding-illustration" shape="rect" placeholder="Ilustração" style="width:100%;height:220px;display:block;"></image-slot>
+        <div style="padding:var(--space-6);text-align:center;">
+          <div class="atrito-eyebrow">PASSO 1 DE 3</div>
+          <h3 style="font-size:var(--fs-h2);font-weight:var(--fw-light);letter-spacing:var(--ls-tight);margin:var(--space-3) 0 0;">Bem-vindo.</h3>
+          <p style="font-size:var(--fs-sm);color:var(--text-secondary);line-height:var(--lh-relaxed);margin-top:var(--space-3);">Substitua este texto pela apresentação do seu produto.</p>
+          <div style="display:flex;justify-content:center;gap:var(--space-2);margin-top:var(--space-5);">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--ink-900);"></span>
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--border-default);"></span>
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--border-default);"></span>
+          </div>
+          <div style="margin-top:var(--space-6);">
+            <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Button" variant="solid" hint-size="100%,52px">Continuar</x-import>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div style="padding:var(--space-8) 0;text-align:center;font-size:var(--fs-xs);color:var(--text-tertiary);letter-spacing:var(--ls-wide);">
+      SUBSTITUA ESTE CONTEÚDO PELO SEU PRODUTO
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { switchOn: false, selected: 'b' };
+
+  renderVals() {
+    const opts = [
+      { key: 'a', label: 'Opção A' },
+      { key: 'b', label: 'Opção B' },
+      { key: 'c', label: 'Opção C' },
+    ];
+    return {
+      switchOn: this.state.switchOn,
+      setSwitch: (v) => this.setState({ switchOn: v }),
+      switchLabel: this.state.switchOn ? 'Ativado' : 'Desativado',
+      selectOptions: opts.map((o) => ({
+        label: o.label,
+        onClick: () => this.setState({ selected: o.key }),
+        bg: this.state.selected === o.key ? 'var(--ink-900)' : 'transparent',
+        color: this.state.selected === o.key ? 'var(--text-inverse)' : 'var(--text-primary)',
+      })),
+      comments: [
+        { avatarId: 'comment-avatar-1', name: 'Nome sobrenome', time: '2h', text: 'Substitua por um comentário real do seu produto.' },
+        { avatarId: 'comment-avatar-2', name: 'Outro usuário', time: '1d', text: 'Outro exemplo de comentário — troque o avatar e o texto.' },
+      ],
+      inkSwatches: [
+        { name: 'ink-1000', value: '#000000' },
+        { name: 'ink-900', value: '#0a0a0a' },
+        { name: 'ink-700', value: '#2e2e2e' },
+        { name: 'ink-500', value: '#6b6b6b' },
+        { name: 'ink-400', value: '#909090' },
+        { name: 'ink-300', value: '#bcbcbc' },
+        { name: 'ink-200', value: '#dcdcdc' },
+        { name: 'ink-100', value: '#ededed' },
+        { name: 'ink-050', value: '#f5f5f4' },
+        { name: 'paper', value: '#ffffff' },
+      ],
+      typeScale: [
+        { label: 'Display', size: 'var(--fs-display)' },
+        { label: 'H1', size: 'var(--fs-h1)' },
+        { label: 'H2', size: 'var(--fs-h2)' },
+        { label: 'H3', size: 'var(--fs-h3)' },
+        { label: 'Body lg', size: 'var(--fs-body-lg)' },
+        { label: 'Small', size: 'var(--fs-sm)' },
+      ],
+      spaceScale: [
+        { name: '4', px: 4 },
+        { name: '8', px: 8 },
+        { name: '16', px: 16 },
+        { name: '24', px: 24 },
+        { name: '32', px: 32 },
+        { name: '48', px: 48 },
+        { name: '64', px: 64 },
+      ],
+      radiusScale: [
+        { name: 'sm — 8', px: '8px' },
+        { name: 'md — 14', px: '14px' },
+        { name: 'lg — 22', px: '22px' },
+        { name: 'pill', px: '999px' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

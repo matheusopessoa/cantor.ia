@@ -1,0 +1,6 @@
+/* Atrito webfonts — Geist Sans + Geist Mono.
+   Loaded from Google Fonts. If you need offline/self-hosted binaries,
+   drop the woff2 files into assets/fonts/ and replace these @import lines
+   with local @font-face rules. */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
