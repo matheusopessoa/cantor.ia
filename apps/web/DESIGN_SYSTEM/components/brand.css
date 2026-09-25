@@ -1,0 +1,82 @@
+/* Marca e cenário: wordmark cromado, letreiro com luzes perseguidoras, horizonte synthwave. */
+
+/* Wordmark "cantor.ia": letras cromadas dos anos 80 */
+.ct-wordmark {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  background: var(--grad-chrome);
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 2px 0 var(--neon-pink)) drop-shadow(0 0 12px rgba(255, 46, 151, 0.5));
+}
+.ct-wordmark__dot { color: var(--neon-cyan); -webkit-text-fill-color: var(--neon-cyan); }
+.ct-wordmark--hero { font-size: var(--fs-display); }
+
+/* Letreiro de fliperama: moldura com lâmpadas perseguindo a borda */
+.ct-marquee {
+  --bulb: var(--neon-yellow);
+  position: relative;
+  padding: var(--space-6) var(--space-7);
+  text-align: center;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  isolation: isolate;
+}
+.ct-marquee::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 10px;
+  background:
+    radial-gradient(circle, var(--bulb) 0 3px, transparent 4px) 0 0 / 24px 10px repeat-x,
+    radial-gradient(circle, var(--bulb) 0 3px, transparent 4px) 100% 0 / 10px 24px repeat-y,
+    radial-gradient(circle, var(--bulb) 0 3px, transparent 4px) 0 100% / 24px 10px repeat-x,
+    radial-gradient(circle, var(--bulb) 0 3px, transparent 4px) 0 0 / 10px 24px repeat-y;
+  filter: drop-shadow(0 0 4px var(--bulb));
+  animation: ct-chase 0.9s linear infinite;
+}
+
+/* Horizonte synthwave: sol listrado + grade em perspectiva.
+   Uso: <div class="ct-horizon" aria-hidden="true"><div class="ct-horizon__sun"></div><div class="ct-horizon__grid"></div></div> */
+.ct-horizon {
+  position: relative;
+  height: 320px;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--night-900) 0%, var(--horizon-sky) 62%, var(--night-950) 62%);
+  pointer-events: none;
+}
+.ct-horizon__sun {
+  position: absolute;
+  left: 50%;
+  bottom: 38%;
+  width: min(360px, 70%);
+  aspect-ratio: 1;
+  translate: -50% 50%;
+  border-radius: var(--radius-pill);
+  background: var(--grad-sunset);
+  /* listras horizontais do sol */
+  -webkit-mask: linear-gradient(180deg, #000 0 52%, transparent 52% 56%, #000 56% 64%, transparent 64% 69%, #000 69% 76%, transparent 76% 82%, #000 82% 88%, transparent 88% 95%, #000 95%);
+          mask: linear-gradient(180deg, #000 0 52%, transparent 52% 56%, #000 56% 64%, transparent 64% 69%, #000 69% 76%, transparent 76% 82%, #000 82% 88%, transparent 88% 95%, #000 95%);
+  filter: drop-shadow(0 0 40px rgba(255, 46, 151, 0.6));
+  clip-path: inset(0 0 50% 0);
+}
+.ct-horizon__grid {
+  position: absolute;
+  left: -50%; right: -50%;
+  top: 62%; bottom: -60%;
+  transform: perspective(300px) rotateX(60deg);
+  transform-origin: 50% 0;
+  background:
+    linear-gradient(90deg, var(--horizon-grid-color) 2px, transparent 2px) 0 0 / var(--horizon-grid-size) var(--horizon-grid-size),
+    linear-gradient(180deg, var(--horizon-grid-color) 2px, transparent 2px) 0 0 / var(--horizon-grid-size) var(--horizon-grid-size);
+  -webkit-mask: linear-gradient(180deg, transparent, #000 30%);
+          mask: linear-gradient(180deg, transparent, #000 30%);
+  animation: ct-grid-scroll 1.2s linear infinite;
+}

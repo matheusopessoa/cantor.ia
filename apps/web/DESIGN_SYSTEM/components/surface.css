@@ -1,0 +1,199 @@
+/* Superfícies: painel (gabinete), palco, linha de música, badge de status, alerta. */
+
+/* Painel: cartão com borda neon discreta */
+.ct-panel {
+  --panel-accent: var(--border-default);
+  padding: var(--space-5);
+  background: var(--bg-surface);
+  border: var(--border-base) solid var(--panel-accent);
+  border-radius: var(--radius-md);
+  box-shadow: var(--glow-soft);
+}
+.ct-panel--pink   { --panel-accent: var(--neon-pink);   box-shadow: var(--glow-pink); }
+.ct-panel--cyan   { --panel-accent: var(--neon-cyan);   box-shadow: var(--glow-cyan); }
+.ct-panel--yellow { --panel-accent: var(--neon-yellow); box-shadow: var(--glow-yellow); }
+.ct-panel--sunken { background: var(--bg-sunken); box-shadow: none; }
+
+.ct-panel__header {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+/* Palco: moldura do karaokê (use junto com .ct-crt) */
+.ct-stage {
+  max-width: var(--stage-max);
+  margin-inline: auto;
+  background: var(--bg-sunken);
+  border: var(--border-thick) solid var(--night-600);
+  border-radius: var(--radius-lg);
+  box-shadow: inset 0 0 60px rgba(178, 107, 255, 0.15), var(--shadow-panel);
+  overflow: hidden;
+}
+
+/* Linha de música (resultado da busca) */
+.ct-song-row {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 72px;
+  padding: var(--space-3) var(--space-4);
+  color: inherit;
+  text-decoration: none;
+  background: var(--bg-surface);
+  border: var(--border-base) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
+}
+.ct-song-row:hover { border-color: var(--neon-pink); box-shadow: var(--glow-pink); transform: translateX(4px); }
+.ct-song-row__cover {
+  display: grid; place-items: center;
+  width: 48px; height: 48px;
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  color: var(--text-on-neon);
+  background: var(--grad-sunset);
+  border-radius: var(--radius-sm);
+}
+.ct-song-row__title  { font-weight: var(--fw-bold); font-size: var(--fs-body-lg); line-height: var(--lh-snug); }
+.ct-song-row__artist { color: var(--text-secondary); font-size: var(--fs-sm); }
+.ct-song-row__meta   { display: flex; align-items: center; gap: var(--space-3); color: var(--text-tertiary); font-size: var(--fs-sm); }
+
+/* Badge de status (referência da música) */
+.ct-badge {
+  --badge-color: var(--text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  font-family: var(--font-arcade);
+  font-size: var(--fs-arcade-sm);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--badge-color);
+  border: var(--border-thin) solid currentColor;
+  border-radius: var(--radius-sm);
+}
+.ct-badge::before {                      /* LED */
+  content: "";
+  width: 8px; height: 8px;
+  background: currentColor;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 0 6px currentColor;
+}
+.ct-badge--ready      { --badge-color: var(--status-success); }
+.ct-badge--processing { --badge-color: var(--status-warning); }
+.ct-badge--processing::before { animation: ct-blink 0.8s var(--ease-step) infinite; }
+.ct-badge--failed     { --badge-color: var(--status-danger); }
+.ct-badge--none       { --badge-color: var(--text-tertiary); }
+.ct-badge--new-record { --badge-color: var(--neon-yellow); text-shadow: var(--text-glow-yellow); }
+
+/* Alerta inline (erro, aviso, dica) */
+.ct-alert {
+  --alert-color: var(--status-info);
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--alert-color) 10%, var(--bg-surface));
+  border: var(--border-base) solid var(--alert-color);
+  border-radius: var(--radius-md);
+}
+.ct-alert svg { width: 24px; height: 24px; color: var(--alert-color); }
+.ct-alert__title { font-weight: var(--fw-bold); }
+.ct-alert__body  { color: var(--text-secondary); font-size: var(--fs-sm); }
+.ct-alert--warning { --alert-color: var(--status-warning); }
+.ct-alert--danger  { --alert-color: var(--status-danger); }
+.ct-alert--success { --alert-color: var(--status-success); }
+
+/* Capa com imagem (miniatura do YouTube) na linha de música */
+.ct-song-row__cover { overflow: hidden; }
+.ct-song-row__cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* TV de tubo: moldura para a miniatura do vídeo do YouTube.
+   <figure class="ct-tv"><div class="ct-tv__screen ct-crt"><img …></div><figcaption class="ct-tv__caption">…</figcaption></figure> */
+.ct-tv {
+  margin: 0;
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: linear-gradient(180deg, var(--night-700), var(--night-800));
+  border: var(--border-base) solid var(--night-500);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-panel);
+}
+.ct-tv__screen {
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--night-950);
+  border-radius: 18px / 24px;           /* vidro abaulado do tubo */
+  box-shadow: inset 0 0 0 var(--border-thick) var(--night-950), inset 0 0 40px rgba(0, 0, 0, 0.8);
+}
+.ct-tv__screen img { width: 100%; height: 100%; object-fit: cover; display: block; filter: saturate(1.15) contrast(1.05); }
+.ct-tv__caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+/* LED de "ligada" no canto da TV */
+.ct-tv__caption::after {
+  content: "";
+  flex: none;
+  width: 8px; height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--fret-red);
+  box-shadow: 0 0 6px var(--fret-red);
+}
+
+/* Espera longa (preparar a música leva 2–3 min).
+   Barra indeterminada + texto que pisca + dica. Use aria-live="polite" no contêiner
+   e role="progressbar" sem aria-valuenow (indeterminado). */
+.ct-loading {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+}
+.ct-loading__title {
+  font-family: var(--font-arcade);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-arcade-lg);
+  letter-spacing: var(--ls-arcade);
+  text-transform: uppercase;
+  color: var(--neon-yellow);
+  text-shadow: var(--text-glow-yellow);
+}
+.ct-loading__title::after {           /* reticências piscando */
+  content: "...";
+  animation: ct-blink 1s var(--ease-step) infinite;
+}
+.ct-loading__bar {
+  position: relative;
+  width: min(420px, 100%);
+  height: 20px;
+  overflow: hidden;
+  background: var(--bg-sunken);
+  border: var(--border-base) solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+.ct-loading__bar::before {             /* bloco de LEDs varrendo a barra */
+  content: "";
+  position: absolute;
+  inset: 2px auto 2px 0;
+  width: 35%;
+  background: repeating-linear-gradient(90deg, var(--neon-pink) 0 12px, transparent 12px 16px);
+  filter: drop-shadow(0 0 4px var(--neon-pink));
+  animation: ct-scan 1.4s var(--ease-inout) infinite alternate;
+}
+.ct-loading__hint { color: var(--text-tertiary); font-size: var(--fs-sm); max-width: 36ch; }
+.ct-loading__elapsed { font-family: var(--font-score); font-size: var(--fs-sm); color: var(--text-secondary); }
+@media (prefers-reduced-motion: reduce) {
+  .ct-loading__bar::before { left: 0; width: 100%; opacity: 0.5; }
+}

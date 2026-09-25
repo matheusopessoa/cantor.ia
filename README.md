@@ -32,7 +32,7 @@ A lista completa de comandos está em [`AGENTS.md`](AGENTS.md#1-comandos-do-proj
 | Documento | Consulte quando... |
 |---|---|
 | [`apps/api/docs/arquitetura.md`](apps/api/docs/arquitetura.md) | precisar entender as camadas da API, o fluxo de requisição ou como adicionar um recurso novo. |
-| [`apps/web/DESIGN_SYSTEM/_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/readme.md`](apps/web/DESIGN_SYSTEM/_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/readme.md) | for tocar em tokens, componentes ou padrões visuais do frontend. |
+| [`apps/web/DESIGN_SYSTEM/readme.md`](apps/web/DESIGN_SYSTEM/readme.md) | for tocar em tokens, componentes ou padrões visuais do frontend. |
 | [`apps/web/AGENTS.md`](apps/web/AGENTS.md) | for gerar código Next.js — contém avisos sobre a versão do Next.js usada no projeto. |
 
 A fonte de verdade é o **código-fonte**. Este `README.md` é apenas um resumo. Documentos de regras

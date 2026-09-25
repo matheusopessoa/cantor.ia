@@ -1,0 +1,41 @@
+/* cantor.ia — espaçamento, raios, bordas, layout.
+   Cantos quase retos (gabinete de fliperama), bordas grossas de 2px que brilham.
+   O "pill" fica reservado para as gemas do highway e os LEDs. */
+
+:root {
+  --space-0:  0;
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  24px;
+  --space-6:  32px;
+  --space-7:  48px;
+  --space-8:  64px;
+  --space-9:  96px;
+
+  --gutter-page: var(--space-4);
+  --gap-stack:   var(--space-5);
+  --gap-section: var(--space-8);
+
+  --radius-none: 0;
+  --radius-sm:   2px;    /* badges, inputs */
+  --radius-md:   6px;    /* botões, painéis */
+  --radius-lg:   12px;   /* palco, modais */
+  --radius-pill: 999px;  /* gemas, LEDs */
+
+  --border-thin:  1px;
+  --border-base:  2px;   /* padrão: bordas neon */
+  --border-thick: 4px;   /* pódio, destaque */
+
+  --content-max: 1120px;
+  --reading-max: 640px;
+  --stage-max:   960px;  /* largura do karaokê */
+  --tap-min:     48px;
+
+  --z-base:    0;
+  --z-overlay: 10;   /* scanlines, vinheta */
+  --z-hud:     20;
+  --z-modal:   30;
+  --z-toast:   40;
+}

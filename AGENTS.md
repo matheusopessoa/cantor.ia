@@ -67,7 +67,7 @@ Monorepo pnpm (Node.js/TypeScript) com dois workspaces:
 |---|---|
 | Rota, controller, service ou repository em `apps/api` | `apps/api/docs/arquitetura.md` |
 | `prisma/schema.prisma` (novo model/campo) | `apps/api/docs/arquitetura.md` + comentário no schema + migration |
-| Tokens/componentes em `apps/web/DESIGN_SYSTEM/` | `apps/web/DESIGN_SYSTEM/_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/readme.md` |
+| Tokens/componentes em `apps/web/DESIGN_SYSTEM/` | `apps/web/DESIGN_SYSTEM/readme.md` |
 | Variáveis de ambiente (`docker-compose.*.yml`, `.env.test`, `config/env.ts`) | `AGENTS.md` §11 e o `README.md` do app afetado |
 
 ---
@@ -100,7 +100,7 @@ cantor.ia/
 │   │   └── Dockerfile
 │   └── web/
 │       ├── app/                 # layout.tsx, page.tsx, globals.css
-│       ├── DESIGN_SYSTEM/       # _ds/atrito-design-system-*/ (readme.md, tokens/*.css)
+│       ├── DESIGN_SYSTEM/       # cantor.ia Design System: readme.md, styles.css, tokens/, components/, DESIGN_SYSTEM.html
 │       ├── public/
 │       ├── AGENTS.md            # avisos sobre a versão do Next.js
 │       └── Dockerfile

@@ -1,0 +1,104 @@
+/* cantor.ia — reset e utilitários globais. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  line-height: var(--lh-normal);
+  color: var(--text-primary);
+  background: var(--grad-stage), var(--bg-page);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;              /* Bungee só tem um peso */
+  line-height: var(--lh-snug);
+  letter-spacing: var(--ls-display);
+  text-transform: uppercase;
+}
+h1 { font-size: var(--fs-h1); }
+h2 { font-size: var(--fs-h2); }
+h3 { font-size: var(--fs-h3); }
+
+p { margin: 0; }
+
+a {
+  color: var(--neon-cyan);
+  text-underline-offset: 3px;
+  transition: color var(--dur-fast) var(--ease-out), text-shadow var(--dur-fast) var(--ease-out);
+}
+a:hover { color: var(--action-secondary-hover); text-shadow: var(--text-glow-cyan); }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+::selection { background: var(--neon-pink); color: var(--text-on-neon); }
+
+/* Foco sempre visível: anel ciano que brilha */
+:focus-visible {
+  outline: var(--border-base) solid var(--border-focus);
+  outline-offset: 3px;
+  box-shadow: var(--glow-cyan);
+}
+
+/* ── Utilitários ─────────────────────────────────────────────────── */
+
+/* Micro-label de fliperama: "PLAYER 1", "HIGH SCORE" */
+.ct-label {
+  font-family: var(--font-arcade);
+  font-size: var(--fs-arcade-sm);
+  line-height: var(--lh-arcade);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+/* Números de HUD (Press Start: só dígitos) */
+.ct-numeric {
+  font-family: var(--font-score);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--ls-arcade);
+}
+
+/* Texto neon (display/arcade apenas) */
+.ct-neon-pink   { color: var(--neon-pink);   text-shadow: var(--text-glow-pink); }
+.ct-neon-cyan   { color: var(--neon-cyan);   text-shadow: var(--text-glow-cyan); }
+.ct-neon-yellow { color: var(--neon-yellow); text-shadow: var(--text-glow-yellow); }
+.ct-neon-purple { color: var(--neon-purple); text-shadow: var(--text-glow-purple); }
+
+.ct-flicker { animation: ct-flicker 2.4s linear 1 both; }
+.ct-blink   { animation: ct-blink 1s var(--ease-step) infinite; }
+
+/* Camada de CRT sobre uma área (position: relative no pai) */
+.ct-crt { position: relative; isolation: isolate; }
+.ct-crt::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-overlay);
+  pointer-events: none;
+  background: var(--scanlines), var(--vignette);
+  border-radius: inherit;
+}
+
+.ct-sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* Acessibilidade de movimento: sem piscar, sem grade andando, sem pulso */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

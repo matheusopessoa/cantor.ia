@@ -1,0 +1,106 @@
+/* cantor.ia — cores.
+   Noite synthwave (fundo índigo quase preto) + neons de fliperama + as 5 cores de
+   traste do Guitar Hero. O app é DARK-ONLY: é um palco, não um documento.
+
+   Contraste medido contra --bg-page (#0B0620):
+     texto 18:1 · texto-2 10.6:1 · texto-3 6.5:1 · todos os neons ≥ 5.7:1
+     texto escuro (--night-900) sobre qualquer neon ≥ 5.7:1
+   Única exceção: --text-disabled (2.8:1), de propósito, só para estado desabilitado. */
+
+:root {
+  color-scheme: dark;
+
+  /* ── Noite (base) ─────────────────────────────────────────────── */
+  --night-950: #07031a;   /* poço: atrás do palco, faixas do highway */
+  --night-900: #0b0620;   /* fundo da página */
+  --night-800: #170c38;   /* superfície: painéis, cards */
+  --night-700: #221250;   /* superfície elevada, hover */
+  --night-600: #2f1a6b;   /* trilhos, divisórias fortes */
+  --night-500: #43298f;   /* borda padrão */
+
+  /* ── Lilás (texto) ────────────────────────────────────────────── */
+  --lilac-050: #f7f2ff;   /* texto principal */
+  --lilac-200: #c4b5f0;   /* texto secundário */
+  --lilac-300: #9a89cf;   /* texto terciário, legendas */
+  --lilac-500: #5e4f8f;   /* desabilitado */
+
+  /* ── Neons de fliperama ───────────────────────────────────────── */
+  --neon-pink:   #ff2e97;
+  --neon-cyan:   #1ff0ff;
+  --neon-yellow: #ffe14d;
+  --neon-purple: #b26bff;
+  --neon-orange: #ff8a1f;
+
+  /* ── Trastes (Guitar Hero) — ordem canônica verde→laranja ────── */
+  --fret-green:  #2bff88;
+  --fret-red:    #ff4766;
+  --fret-yellow: #ffe14d;
+  --fret-blue:   #3da5ff;
+  --fret-orange: #ff8a1f;
+
+  /* ── Semânticos: superfícies ──────────────────────────────────── */
+  --bg-page:    var(--night-900);
+  --bg-sunken:  var(--night-950);
+  --bg-surface: var(--night-800);
+  --bg-raised:  var(--night-700);
+  --bg-scrim:   rgba(7, 3, 26, 0.82);
+
+  /* ── Semânticos: texto ────────────────────────────────────────── */
+  --text-primary:   var(--lilac-050);
+  --text-secondary: var(--lilac-200);
+  --text-tertiary:  var(--lilac-300);
+  --text-disabled:  var(--lilac-500);
+  --text-on-neon:   var(--night-900);   /* texto sobre botão/badge neon preenchido */
+
+  /* ── Semânticos: bordas ───────────────────────────────────────── */
+  --border-subtle:  var(--night-600);
+  --border-default: var(--night-500);
+  --border-strong:  var(--neon-purple);
+  --border-focus:   var(--neon-cyan);
+
+  /* ── Semânticos: ação ─────────────────────────────────────────── */
+  --action-primary:        var(--neon-pink);    /* START, Cantar, Enviar */
+  --action-primary-hover:  #ff5cae;
+  --action-secondary:      var(--neon-cyan);    /* ações de apoio, contorno */
+  --action-secondary-hover:#7af6ff;
+
+  /* ── Semânticos: status ───────────────────────────────────────── */
+  --status-success: var(--fret-green);
+  --status-warning: var(--neon-yellow);
+  --status-danger:  var(--fret-red);
+  --status-info:    var(--fret-blue);
+
+  /* ── Jogo: afinação ao vivo (highway) ─────────────────────────── */
+  --pitch-reference: var(--neon-cyan);   /* a melodia original */
+  --pitch-voice:     var(--neon-pink);   /* a sua voz */
+  --hit-perfect:     var(--fret-green);  /* ≤ 50 cents */
+  --hit-good:        var(--fret-yellow); /* 50–100 cents */
+  --hit-miss:        var(--fret-red);    /* > 100 cents / sem voz */
+
+  /* ── Jogo: conceito da nota (arcade) ──────────────────────────── */
+  --grade-s: var(--neon-yellow);   /* 9.0–10  */
+  --grade-a: var(--fret-green);    /* 7.0–8.9 */
+  --grade-b: var(--fret-blue);     /* 5.0–6.9 */
+  --grade-c: var(--fret-orange);   /* 3.0–4.9 */
+  --grade-d: var(--fret-red);      /* 0–2.9   */
+
+  /* ── Jogo: pódio do ranking ───────────────────────────────────── */
+  --rank-1: var(--neon-yellow);
+  --rank-2: var(--neon-cyan);
+  --rank-3: var(--neon-orange);
+
+  /* ── Karaokê: preenchimento da letra ──────────────────────────── */
+  --lyric-unsung: var(--lilac-050);
+  --lyric-sung:   var(--neon-cyan);
+  --lyric-stroke: var(--night-950);
+
+  /* ── Cenário ──────────────────────────────────────────────────── */
+  --horizon-sky:  #2a0f4f;   /* céu logo acima do horizonte */
+  --gem-highlight:#ffffff;   /* reflexo no topo da gema */
+
+  /* ── Gradientes de assinatura ─────────────────────────────────── */
+  --grad-sunset: linear-gradient(180deg, #ffe14d 0%, #ff8a1f 38%, #ff2e97 72%, #b26bff 100%);
+  --grad-chrome: linear-gradient(180deg, #ffffff 0%, #c4b5f0 44%, #43298f 50%, #1ff0ff 56%, #f7f2ff 100%);
+  --grad-stage:  radial-gradient(120% 80% at 50% 0%, #2f1a6b 0%, #0b0620 60%);
+  --grad-neon:   linear-gradient(90deg, #ff2e97 0%, #b26bff 50%, #1ff0ff 100%);
+}

@@ -1,0 +1,9 @@
+/* cantor.ia — webfonts (Google Fonts).
+   Bungee          → display: títulos, botões, letreiro de fliperama
+   Silkscreen      → HUD de arcade com texto: micro-labels, nomes, ranking, botão START
+   Press Start 2P  → SÓ números e palavras fixas em inglês (placar, contagem, PERFECT/MISS):
+                     não tem maiúsculas acentuadas (Õ, Í, Ê), então nunca recebe texto em pt-BR
+   Rubik           → leitura: corpo de texto e LETRA da música (precisa ser legível a 1 m da tela)
+   Bungee, Silkscreen e Rubik cobrem todos os acentos do pt-BR. */
+
+@import url('https://fonts.googleapis.com/css2?family=Bungee&family=Press+Start+2P&family=Rubik:wght@400;500;700;800;900&family=Silkscreen:wght@400;700&display=swap');

@@ -1,0 +1,115 @@
+/* ct-btn — botões de fliperama.
+   Botão físico: bloco sólido embaixo (--shadow-press) que "afunda" ao apertar.
+   Variantes: primary (rosa preenchido, 1 por tela) · secondary (contorno ciano) · ghost.
+   Tamanhos: sm · md (padrão) · lg · start (o botão START gigante que pulsa). */
+
+.ct-btn {
+  --btn-bg: transparent;
+  --btn-fg: var(--text-primary);
+  --btn-border: var(--border-default);
+  --btn-glow: none;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+  padding: 0 var(--space-5);
+  font-family: var(--font-display);
+  font-size: var(--fs-body);
+  letter-spacing: var(--ls-display);
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--btn-fg);
+  background: var(--btn-bg);
+  border: var(--border-base) solid var(--btn-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-press), var(--btn-glow);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    transform var(--dur-instant) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    background-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.ct-btn:hover { transform: translateY(-1px); }
+.ct-btn:active {
+  transform: translateY(3px);
+  box-shadow: var(--shadow-press-active), var(--btn-glow);
+}
+.ct-btn svg { width: 1.25em; height: 1.25em; flex: none; }
+
+.ct-btn--primary {
+  --btn-bg: var(--action-primary);
+  --btn-fg: var(--text-on-neon);
+  --btn-border: var(--action-primary);
+  --btn-glow: var(--glow-pink);
+}
+.ct-btn--primary:hover { --btn-bg: var(--action-primary-hover); }
+
+.ct-btn--secondary {
+  --btn-fg: var(--action-secondary);
+  --btn-border: var(--action-secondary);
+}
+.ct-btn--secondary:hover { --btn-glow: var(--glow-cyan); color: var(--action-secondary-hover); }
+
+.ct-btn--ghost {
+  --btn-border: transparent;
+  --btn-fg: var(--text-secondary);
+  box-shadow: none;
+}
+.ct-btn--ghost:hover { --btn-fg: var(--text-primary); background: var(--bg-raised); }
+.ct-btn--ghost:active { box-shadow: none; }
+
+.ct-btn--danger {
+  --btn-fg: var(--status-danger);
+  --btn-border: var(--status-danger);
+}
+.ct-btn--danger:hover { --btn-glow: var(--glow-red); }
+
+.ct-btn--sm { min-height: 36px; padding: 0 var(--space-3); font-size: var(--fs-sm); }
+.ct-btn--lg { min-height: 60px; padding: 0 var(--space-6); font-size: var(--fs-body-lg); }
+
+/* START: o botão que chama para cantar. Pulsa no beat. */
+.ct-btn--start {
+  min-height: 72px;
+  padding: 0 var(--space-7);
+  font-family: var(--font-arcade);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-h3);
+  letter-spacing: var(--ls-arcade);
+  animation: ct-beat calc(var(--dur-beat) * 2) var(--ease-out) infinite;
+}
+.ct-btn--start:hover, .ct-btn--start:active { animation-play-state: paused; }
+
+.ct-btn--block { display: flex; width: 100%; }
+
+.ct-btn:disabled,
+.ct-btn[aria-disabled="true"] {
+  --btn-bg: transparent;
+  --btn-fg: var(--text-disabled);
+  --btn-border: var(--border-subtle);
+  --btn-glow: none;
+  box-shadow: none;
+  transform: none;
+  cursor: not-allowed;
+  animation: none;
+}
+
+/* Botão só com ícone: precisa de aria-label */
+.ct-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  padding: 0;
+  color: var(--text-secondary);
+  background: transparent;
+  border: var(--border-base) solid var(--border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.ct-icon-btn:hover { color: var(--neon-cyan); border-color: var(--neon-cyan); box-shadow: var(--glow-cyan); }
+.ct-icon-btn svg { width: 22px; height: 22px; }

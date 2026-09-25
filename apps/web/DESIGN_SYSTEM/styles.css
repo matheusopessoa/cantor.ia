@@ -1,11 +1,18 @@
 /* ════════════════════════════════════════════════════════════════
-   ATRITO DESIGN SYSTEM — global entry point
-   Consumers link this single file. It is an import manifest only;
-   never add rules here directly.
+   CANTOR.IA DESIGN SYSTEM
+   Ponto de entrada único. Só importa; nunca escreva regras aqui.
    ════════════════════════════════════════════════════════════════ */
 
 @import url('./tokens/fonts.css');
 @import url('./tokens/colors.css');
 @import url('./tokens/typography.css');
 @import url('./tokens/spacing.css');
+@import url('./tokens/effects.css');
+@import url('./tokens/motion.css');
 @import url('./tokens/base.css');
+
+@import url('./components/button.css');
+@import url('./components/form.css');
+@import url('./components/surface.css');
+@import url('./components/game.css');
+@import url('./components/brand.css');

@@ -1,316 +1,457 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<script src="./support.js"></script>
+<title>cantor.ia — Design System</title>
+<link rel="icon" href="assets/mark.svg">
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* estilos só da vitrine */
+  .doc { max-width: var(--content-max); margin: 0 auto; padding: 0 var(--gutter-page) var(--space-9); }
+  .doc-section { padding: var(--space-8) 0; border-bottom: var(--border-base) solid var(--border-subtle); display: grid; gap: var(--space-5); }
+  .doc-section > header { display: grid; gap: var(--space-2); }
+  .doc-section > header p { color: var(--text-secondary); max-width: var(--reading-max); }
+  .doc-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .doc-grid--wide { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+  .doc-row { display: flex; flex-wrap: wrap; gap: var(--space-4); align-items: center; }
+  .swatch { display: grid; gap: var(--space-2); }
+  .swatch__chip { height: 72px; border-radius: var(--radius-md); border: var(--border-base) solid var(--border-subtle); }
+  .swatch__name { font-weight: var(--fw-bold); font-size: var(--fs-sm); }
+  .swatch__meta { font-family: var(--font-arcade); font-size: var(--fs-arcade-sm); color: var(--text-tertiary); }
+  .nav { position: sticky; top: 0; z-index: var(--z-hud); display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
+         padding: var(--space-3) var(--gutter-page); background: rgba(11, 6, 32, 0.9); backdrop-filter: blur(8px); border-bottom: var(--border-base) solid var(--night-600); }
+  .nav__links { display: flex; gap: var(--space-4); flex-wrap: wrap; font-family: var(--font-arcade); font-size: var(--fs-arcade-sm); text-transform: uppercase; }
+  .nav__links a { text-decoration: none; color: var(--text-secondary); }
+  .hero { position: relative; }
+  .hero__copy { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: var(--space-4); text-align: center; padding: var(--space-4); }
+  .demo-stage .ct-lyrics { min-height: 180px; }
+  .type-sample { display: grid; gap: var(--space-2); padding: var(--space-4) 0; border-bottom: var(--border-thin) solid var(--border-subtle); }
+  .gem-demo { position: absolute; top: 0; animation: ct-gem-fall 2.4s linear infinite; }
+  .do-dont { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .do-dont ul { margin: 0; padding-left: var(--space-5); display: grid; gap: var(--space-2); color: var(--text-secondary); }
+  @media (max-width: 640px) { .nav__links { display: none; } }
+</style>
 </head>
 <body>
-<x-dc>
-<!--[CDATA[<sc-helmet-->
-  <link rel="stylesheet" href="_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/tokens/fonts.css">
-  <link rel="stylesheet" href="_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/tokens/colors.css">
-  <link rel="stylesheet" href="_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/tokens/typography.css">
-  <link rel="stylesheet" href="_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/tokens/spacing.css">
-  <link rel="stylesheet" href="_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/tokens/base.css">
-  <link rel="stylesheet" href="_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/styles.css">
-  <script src="_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/_ds_bundle.js"></script>
-  <script src="./image-slot.js"></script>
-  <style>
-    a { color: var(--text-primary); }
-    a:hover { color: var(--text-secondary); }
-  </style>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><path d="M12 18v4"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-headphones" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l14 8-14 8Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4v16M16 4v16"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></symbol>
+  <symbol id="i-trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0Z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></symbol>
+</svg>
 
-<div style="background:var(--bg-page);min-height:100vh;font-family:var(--font-sans);color:var(--text-primary);">
-
-  <!-- Header: empty logo slot, since this is a boilerplate -->
-  <div style="max-width: 960px; margin: 0 auto; padding: var(--space-9) var(--space-6) var(--space-8); display: flex; align-items: center; justify-content: space-between; gap: var(--space-6); border-bottom: var(--border-hair) solid var(--border-default)">
-    <div style="display:flex;align-items:center;gap:var(--space-4);">
-      <div style="width:48px;height:48px;flex:0 0 auto;">
-        <image-slot id="logo-mark" shape="rounded" radius="14" placeholder="Logo" style="width:48px;height:48px;"></image-slot>
-      </div>
-      <div>
-        <div class="atrito-wordmark" style="font-size:var(--fs-title);font-weight:var(--fw-bold);letter-spacing:var(--ls-tight);">your product</div>
-        <div class="atrito-eyebrow" style="margin-top:2px;">DESIGN SYSTEM BOILERPLATE</div>
-      </div>
-    </div>
-    <div style="font-size:var(--fs-sm);color:var(--text-secondary);text-align:right;">
-      Baseado no Atrito Design System<br>Monocromático · calmo · sem pressa
-    </div>
+<nav class="nav" aria-label="Seções">
+  <span class="ct-wordmark">cantor<span class="ct-wordmark__dot">.</span>ia</span>
+  <div class="nav__links">
+    <a href="#cores">Cores</a><a href="#tipo">Tipo</a><a href="#botoes">Botões</a><a href="#forms">Forms</a>
+    <a href="#superficies">Superfícies</a><a href="#preparar">Preparar</a><a href="#karaoke">Karaokê</a><a href="#placar">Placar</a><a href="#voz">Voz</a>
   </div>
+</nav>
 
-  <div style="max-width:960px;margin:0 auto;padding:0 var(--space-6);">
-
-    <!-- Intro -->
-    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);">
-      <div class="atrito-eyebrow">COMEÇE AQUI</div>
-      <h1 style="font-size:var(--fs-h1);font-weight:var(--fw-light);letter-spacing:var(--ls-tight);line-height:var(--lh-tight);margin:var(--space-3) 0 0;max-width:640px;">
-        Um ponto de partida em preto e branco.
-      </h1>
-      <p style="font-size:var(--fs-body-lg);color:var(--text-secondary);line-height:var(--lh-relaxed);max-width:520px;margin-top:var(--space-4);">
-        Nenhuma cor de destaque, nenhum gradiente. Hierarquia vem de valor, peso e espaço — nunca de matiz. Substitua o texto e os componentes abaixo pelos do seu produto.
-      </p>
-    </section>
-
-    <!-- Colors -->
-    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);">
-      <div class="atrito-eyebrow">CORES</div>
-      <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:var(--space-2) 0 var(--space-6);">Escala de tinta</h2>
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:var(--space-3);">
-        <sc-for list="{{ inkSwatches }}" as="sw" hint-placeholder-count="10">
-          <div>
-            <div style="height:64px;border-radius:var(--radius-sm);border:var(--border-hair) solid var(--border-default);background:{{ sw.value }};"></div>
-            <div style="margin-top:var(--space-2);font-size:var(--fs-xs);color:var(--text-secondary);">{{ sw.name }}</div>
-            <div class="atrito-numeric" style="font-size:var(--fs-xs);color:var(--text-tertiary);">{{ sw.value }}</div>
-          </div>
-        </sc-for>
-      </div>
-    </section>
-
-    <!-- Typography -->
-    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);">
-      <div class="atrito-eyebrow">TIPOGRAFIA</div>
-      <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:var(--space-2) 0 var(--space-6);">Escala — Geist</h2>
-      <div style="display:flex;flex-direction:column;gap:var(--space-4);">
-        <sc-for list="{{ typeScale }}" as="t" hint-placeholder-count="6">
-          <div style="display:flex;align-items:baseline;gap:var(--space-5);border-bottom:var(--border-hair) solid var(--border-subtle);padding-bottom:var(--space-4);">
-            <div style="width:88px;flex:0 0 auto;font-size:var(--fs-xs);color:var(--text-tertiary);">{{ t.label }}</div>
-            <div style="font-size:{{ t.size }};font-weight:var(--fw-light);letter-spacing:var(--ls-tight);line-height:var(--lh-tight);">Notice the urge</div>
-          </div>
-        </sc-for>
-      </div>
-    </section>
-
-    <!-- Spacing / radii -->
-    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);">
-      <div class="atrito-eyebrow">ESPAÇAMENTO &amp; RAIOS</div>
-      <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:var(--space-2) 0 var(--space-6);">O espaço em branco é o material</h2>
-      <div style="display:flex;flex-wrap:wrap;gap:var(--space-5);align-items:flex-end;">
-        <sc-for list="{{ spaceScale }}" as="s" hint-placeholder-count="7">
-          <div style="text-align:center;">
-            <div style="width:{{ s.px }}px;height:{{ s.px }}px;background:var(--ink-900);border-radius:2px;"></div>
-            <div style="margin-top:var(--space-2);font-size:var(--fs-xs);color:var(--text-secondary);">{{ s.name }}</div>
-          </div>
-        </sc-for>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:var(--space-5);margin-top:var(--space-7);">
-        <sc-for list="{{ radiusScale }}" as="r" hint-placeholder-count="4">
-          <div style="text-align:center;">
-            <div style="width:72px;height:72px;border:var(--border-medium) solid var(--border-strong);border-radius:{{ r.px }};"></div>
-            <div style="margin-top:var(--space-2);font-size:var(--fs-xs);color:var(--text-secondary);">{{ r.name }}</div>
-          </div>
-        </sc-for>
-      </div>
-    </section>
-
-    <!-- Buttons -->
-    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);">
-      <div class="atrito-eyebrow">COMPONENTES</div>
-      <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:var(--space-2) 0 var(--space-6);">Botões</h2>
-      <div style="display:flex;flex-wrap:wrap;gap:var(--space-4);align-items:center;">
-        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Button" variant="solid" hint-size="auto,52px">Step away</x-import>
-        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Button" variant="outline" hint-size="auto,52px">Open anyway</x-import>
-        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Button" variant="ghost" hint-size="auto,52px">Ghost</x-import>
-        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Button" variant="quiet" hint-size="auto,52px">Quiet</x-import>
-        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.IconButton" label="Fechar" hint-size="48px,48px">×</x-import>
-      </div>
-    </section>
-
-    <!-- Badges + Stat -->
-    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);display:grid;grid-template-columns:1fr 1fr;gap:var(--space-8);">
-      <div>
-        <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:0 0 var(--space-5);">Badges</h2>
-        <div style="display:flex;flex-wrap:wrap;gap:var(--space-3);align-items:center;">
-          <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Badge" variant="soft" hint-size="auto,26px">Soft</x-import>
-          <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Badge" variant="outline" hint-size="auto,26px">Outline</x-import>
-          <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Badge" variant="solid" hint-size="auto,26px">Solid</x-import>
-          <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Badge" variant="eyebrow" hint-size="auto,20px">Eyebrow</x-import>
-        </div>
-      </div>
-      <div>
-        <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:0 0 var(--space-5);">Stat</h2>
-        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Stat" value="23" unit="opens" label="AVOIDED THIS WEEK" caption="Quietly, it adds up." hint-size="auto,auto"></x-import>
-      </div>
-    </section>
-
-    <!-- Cards -->
-    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);">
-      <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:0 0 var(--space-5);">Cards</h2>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:var(--space-4);">
-        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Card" variant="default" hint-size="auto,120px">
-          <div style="font-size:var(--fs-sm);color:var(--text-secondary);">default</div>
-        </x-import>
-        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Card" variant="sunken" hint-size="auto,120px">
-          <div style="font-size:var(--fs-sm);color:var(--text-secondary);">sunken</div>
-        </x-import>
-        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Card" variant="inverse" hint-size="auto,120px">
-          <div style="font-size:var(--fs-sm);color:var(--text-inverse-secondary);">inverse</div>
-        </x-import>
-      </div>
-    </section>
-
-    <!-- Switch + Select -->
-    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);display:grid;grid-template-columns:1fr 1fr;gap:var(--space-8);">
-      <div>
-        <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:0 0 var(--space-5);">Switch</h2>
-        <div style="display:flex;align-items:center;gap:var(--space-4);">
-          <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Switch" checked="{{ switchOn }}" on-change="{{ setSwitch }}" hint-size="52px,30px"></x-import>
-          <span style="font-size:var(--fs-sm);color:var(--text-secondary);">{{ switchLabel }}</span>
-        </div>
-      </div>
-      <div>
-        <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:0 0 var(--space-5);">Seletor</h2>
-        <div style="display:inline-flex;border:var(--border-hair) solid var(--border-default);border-radius:var(--radius-sm);overflow:hidden;">
-          <sc-for list="{{ selectOptions }}" as="opt" hint-placeholder-count="3">
-            <button onClick="{{ opt.onClick }}" style="font-family:var(--font-sans);font-size:var(--fs-sm);padding:var(--space-3) var(--space-5);border:none;cursor:pointer;background:{{ opt.bg }};color:{{ opt.color }};" style-hover="{{ opt.hoverStyle }}">{{ opt.label }}</button>
-          </sc-for>
-        </div>
-      </div>
-    </section>
-
-    <!-- Login -->
-    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);">
-      <div class="atrito-eyebrow">AUTENTICAÇÃO</div>
-      <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:var(--space-2) 0 var(--space-6);">Login</h2>
-      <div style="max-width:360px;display:flex;flex-direction:column;gap:var(--space-4);">
-        <div>
-          <label style="display:block;font-size:var(--fs-xs);color:var(--text-secondary);margin-bottom:var(--space-2);">E-mail</label>
-          <input type="email" placeholder="voce@exemplo.com" style="width:100%;box-sizing:border-box;font-family:var(--font-sans);font-size:var(--fs-sm);padding:var(--space-3) var(--space-4);border:var(--border-hair) solid var(--border-default);border-radius:var(--radius-sm);background:var(--bg-page);color:var(--text-primary);" />
-        </div>
-        <div>
-          <label style="display:block;font-size:var(--fs-xs);color:var(--text-secondary);margin-bottom:var(--space-2);">Senha</label>
-          <input type="password" placeholder="••••••••" style="width:100%;box-sizing:border-box;font-family:var(--font-sans);font-size:var(--fs-sm);padding:var(--space-3) var(--space-4);border:var(--border-hair) solid var(--border-default);border-radius:var(--radius-sm);background:var(--bg-page);color:var(--text-primary);" />
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;">
-          <label style="display:flex;align-items:center;gap:var(--space-2);font-size:var(--fs-xs);color:var(--text-secondary);cursor:pointer;">
-            <input type="checkbox" style="accent-color:var(--ink-900);" />
-            Lembrar de mim
-          </label>
-          <a href="#" style="font-size:var(--fs-xs);">Esqueceu a senha?</a>
-        </div>
-        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Button" variant="solid" hint-size="100%,52px">Entrar</x-import>
-        <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Button" variant="outline" hint-size="100%,52px">Criar conta</x-import>
-      </div>
-    </section>
-
-    <!-- Comment card -->
-    <section style="padding:var(--space-8) 0;border-bottom:var(--border-hair) solid var(--border-default);">
-      <div class="atrito-eyebrow">SOCIAL</div>
-      <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:var(--space-2) 0 var(--space-6);">Card de comentário</h2>
-      <div style="display:flex;flex-direction:column;gap:var(--space-3);max-width:520px;">
-        <sc-for list="{{ comments }}" as="c" hint-placeholder-count="2">
-          <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Card" variant="default" hint-size="100%,auto">
-            <div style="display:flex;gap:var(--space-4);">
-              <image-slot id="{{ c.avatarId }}" shape="circle" placeholder="Foto" style="width:40px;height:40px;flex:0 0 auto;"></image-slot>
-              <div style="flex:1;min-width:0;">
-                <div style="display:flex;align-items:baseline;gap:var(--space-2);">
-                  <span style="font-size:var(--fs-sm);font-weight:var(--fw-medium);">{{ c.name }}</span>
-                  <span style="font-size:var(--fs-xs);color:var(--text-tertiary);">{{ c.time }}</span>
-                </div>
-                <p style="margin:var(--space-2) 0 0;font-size:var(--fs-sm);color:var(--text-secondary);line-height:var(--lh-relaxed);">{{ c.text }}</p>
-                <div style="margin-top:var(--space-3);display:flex;gap:var(--space-4);">
-                  <button style="background:none;border:none;padding:0;cursor:pointer;font-size:var(--fs-xs);color:var(--text-tertiary);">Responder</button>
-                  <button style="background:none;border:none;padding:0;cursor:pointer;font-size:var(--fs-xs);color:var(--text-tertiary);">Curtir</button>
-                </div>
-              </div>
-            </div>
-          </x-import>
-        </sc-for>
-      </div>
-    </section>
-
-    <!-- Onboarding screen example -->
-    <section style="padding:var(--space-8) 0;">
-      <div class="atrito-eyebrow">TELA DE EXEMPLO</div>
-      <h2 style="font-size:var(--fs-h3);font-weight:var(--fw-light);margin:var(--space-2) 0 var(--space-6);">Onboarding</h2>
-      <div style="max-width:340px;border:var(--border-hair) solid var(--border-default);border-radius:var(--radius-lg);overflow:hidden;">
-        <image-slot id="onboarding-illustration" shape="rect" placeholder="Ilustração" style="width:100%;height:220px;display:block;"></image-slot>
-        <div style="padding:var(--space-6);text-align:center;">
-          <div class="atrito-eyebrow">PASSO 1 DE 3</div>
-          <h3 style="font-size:var(--fs-h2);font-weight:var(--fw-light);letter-spacing:var(--ls-tight);margin:var(--space-3) 0 0;">Bem-vindo.</h3>
-          <p style="font-size:var(--fs-sm);color:var(--text-secondary);line-height:var(--lh-relaxed);margin-top:var(--space-3);">Substitua este texto pela apresentação do seu produto.</p>
-          <div style="display:flex;justify-content:center;gap:var(--space-2);margin-top:var(--space-5);">
-            <span style="width:6px;height:6px;border-radius:50%;background:var(--ink-900);"></span>
-            <span style="width:6px;height:6px;border-radius:50%;background:var(--border-default);"></span>
-            <span style="width:6px;height:6px;border-radius:50%;background:var(--border-default);"></span>
-          </div>
-          <div style="margin-top:var(--space-6);">
-            <x-import component-from-global-scope="AtritoDesignSystem_04edc5.Button" variant="solid" hint-size="100%,52px">Continuar</x-import>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <div style="padding:var(--space-8) 0;text-align:center;font-size:var(--fs-xs);color:var(--text-tertiary);letter-spacing:var(--ls-wide);">
-      SUBSTITUA ESTE CONTEÚDO PELO SEU PRODUTO
-    </div>
-
+<header class="hero ct-crt">
+  <div class="ct-horizon" style="height: 460px;" aria-hidden="true">
+    <div class="ct-horizon__sun"></div>
+    <div class="ct-horizon__grid"></div>
   </div>
-</div>
-</x-dc>
-<script type="text/x-dc" data-dc-script>
-class Component extends DCLogic {
-  state = { switchOn: false, selected: 'b' };
+  <div class="hero__copy">
+    <span class="ct-label ct-neon-cyan">cantor.ia Design System</span>
+    <h1 class="ct-wordmark ct-wordmark--hero ct-flicker">cantor<span class="ct-wordmark__dot">.</span>ia</h1>
+    <p style="max-width: 460px; color: var(--text-primary); font-size: var(--fs-body-lg); padding: var(--space-2) var(--space-4); background: var(--bg-scrim); border-radius: var(--radius-md);">
+      Cante, acerte a nota e grave seu nome no ranking.
+    </p>
+    <a class="ct-btn ct-btn--primary ct-btn--start" href="#karaoke">Press start</a>
+  </div>
+</header>
 
-  renderVals() {
-    const opts = [
-      { key: 'a', label: 'Opção A' },
-      { key: 'b', label: 'Opção B' },
-      { key: 'c', label: 'Opção C' },
-    ];
-    return {
-      switchOn: this.state.switchOn,
-      setSwitch: (v) => this.setState({ switchOn: v }),
-      switchLabel: this.state.switchOn ? 'Ativado' : 'Desativado',
-      selectOptions: opts.map((o) => ({
-        label: o.label,
-        onClick: () => this.setState({ selected: o.key }),
-        bg: this.state.selected === o.key ? 'var(--ink-900)' : 'transparent',
-        color: this.state.selected === o.key ? 'var(--text-inverse)' : 'var(--text-primary)',
-      })),
-      comments: [
-        { avatarId: 'comment-avatar-1', name: 'Nome sobrenome', time: '2h', text: 'Substitua por um comentário real do seu produto.' },
-        { avatarId: 'comment-avatar-2', name: 'Outro usuário', time: '1d', text: 'Outro exemplo de comentário — troque o avatar e o texto.' },
-      ],
-      inkSwatches: [
-        { name: 'ink-1000', value: '#000000' },
-        { name: 'ink-900', value: '#0a0a0a' },
-        { name: 'ink-700', value: '#2e2e2e' },
-        { name: 'ink-500', value: '#6b6b6b' },
-        { name: 'ink-400', value: '#909090' },
-        { name: 'ink-300', value: '#bcbcbc' },
-        { name: 'ink-200', value: '#dcdcdc' },
-        { name: 'ink-100', value: '#ededed' },
-        { name: 'ink-050', value: '#f5f5f4' },
-        { name: 'paper', value: '#ffffff' },
-      ],
-      typeScale: [
-        { label: 'Display', size: 'var(--fs-display)' },
-        { label: 'H1', size: 'var(--fs-h1)' },
-        { label: 'H2', size: 'var(--fs-h2)' },
-        { label: 'H3', size: 'var(--fs-h3)' },
-        { label: 'Body lg', size: 'var(--fs-body-lg)' },
-        { label: 'Small', size: 'var(--fs-sm)' },
-      ],
-      spaceScale: [
-        { name: '4', px: 4 },
-        { name: '8', px: 8 },
-        { name: '16', px: 16 },
-        { name: '24', px: 24 },
-        { name: '32', px: 32 },
-        { name: '48', px: 48 },
-        { name: '64', px: 64 },
-      ],
-      radiusScale: [
-        { name: 'sm — 8', px: '8px' },
-        { name: 'md — 14', px: '14px' },
-        { name: 'lg — 22', px: '22px' },
-        { name: 'pill', px: '999px' },
-      ],
-    };
+<main class="doc">
+
+  <!-- ═══ PRINCÍPIOS ═══ -->
+  <section class="doc-section">
+    <header>
+      <span class="ct-label">00 · Princípios</span>
+      <h2>O palco acende quando você canta</h2>
+    </header>
+    <div class="doc-grid doc-grid--wide">
+      <div class="ct-panel"><h3 class="ct-neon-pink" style="margin-bottom: var(--space-2)">Brilho é hierarquia</h3><p style="color: var(--text-secondary)">Não há sombra: o que importa acende. Repouso sem brilho, interação com brilho suave, ação principal e foco com brilho forte.</p></div>
+      <div class="ct-panel"><h3 class="ct-neon-cyan" style="margin-bottom: var(--space-2)">Letra sempre legível</h3><p style="color: var(--text-secondary)">Efeitos nunca competem com a letra. Ela usa Rubik 900 com contorno, lida a um metro da tela, com o preenchimento de karaokê em ciano.</p></div>
+      <div class="ct-panel"><h3 class="ct-neon-yellow" style="margin-bottom: var(--space-2)">Recompensa com punch</h3><p style="color: var(--text-secondary)">Nota, conceito e recorde entram com "pop" e overshoot. Todo o resto é rápido (≤ 240ms). Tudo para em movimento reduzido.</p></div>
+    </div>
+  </section>
+
+  <!-- ═══ CORES ═══ -->
+  <section class="doc-section" id="cores">
+    <header>
+      <span class="ct-label">01 · Cores</span>
+      <h2>Noite, neon e trastes</h2>
+      <p>O app é só escuro. Todos os neons passam de 4.5:1 sobre o fundo, e o texto escuro sobre qualquer neon também.</p>
+    </header>
+    <h3 class="ct-label">Noite (superfícies)</h3>
+    <div class="doc-grid">
+      <div class="swatch"><div class="swatch__chip" style="background: var(--night-950)"></div><span class="swatch__name">night-950</span><span class="swatch__meta">bg-sunken</span></div>
+      <div class="swatch"><div class="swatch__chip" style="background: var(--night-900)"></div><span class="swatch__name">night-900</span><span class="swatch__meta">bg-page</span></div>
+      <div class="swatch"><div class="swatch__chip" style="background: var(--night-800)"></div><span class="swatch__name">night-800</span><span class="swatch__meta">bg-surface</span></div>
+      <div class="swatch"><div class="swatch__chip" style="background: var(--night-700)"></div><span class="swatch__name">night-700</span><span class="swatch__meta">bg-raised</span></div>
+      <div class="swatch"><div class="swatch__chip" style="background: var(--night-500)"></div><span class="swatch__name">night-500</span><span class="swatch__meta">border</span></div>
+    </div>
+    <h3 class="ct-label">Neons</h3>
+    <div class="doc-grid">
+      <div class="swatch"><div class="swatch__chip" style="background: var(--neon-pink); box-shadow: var(--glow-pink)"></div><span class="swatch__name">neon-pink</span><span class="swatch__meta">ação · sua voz</span></div>
+      <div class="swatch"><div class="swatch__chip" style="background: var(--neon-cyan); box-shadow: var(--glow-cyan)"></div><span class="swatch__name">neon-cyan</span><span class="swatch__meta">foco · referência</span></div>
+      <div class="swatch"><div class="swatch__chip" style="background: var(--neon-yellow); box-shadow: var(--glow-yellow)"></div><span class="swatch__name">neon-yellow</span><span class="swatch__meta">recorde · 1º</span></div>
+      <div class="swatch"><div class="swatch__chip" style="background: var(--neon-purple); box-shadow: var(--glow-purple)"></div><span class="swatch__name">neon-purple</span><span class="swatch__meta">estrutura</span></div>
+      <div class="swatch"><div class="swatch__chip" style="background: var(--neon-orange)"></div><span class="swatch__name">neon-orange</span><span class="swatch__meta">3º lugar</span></div>
+    </div>
+    <h3 class="ct-label">Trastes → acerto e conceito</h3>
+    <div class="doc-grid">
+      <div class="swatch"><div class="swatch__chip" style="background: var(--fret-green)"></div><span class="swatch__name">fret-green</span><span class="swatch__meta">perfect · A</span></div>
+      <div class="swatch"><div class="swatch__chip" style="background: var(--fret-red)"></div><span class="swatch__name">fret-red</span><span class="swatch__meta">miss · D</span></div>
+      <div class="swatch"><div class="swatch__chip" style="background: var(--fret-yellow)"></div><span class="swatch__name">fret-yellow</span><span class="swatch__meta">good · S</span></div>
+      <div class="swatch"><div class="swatch__chip" style="background: var(--fret-blue)"></div><span class="swatch__name">fret-blue</span><span class="swatch__meta">info · B</span></div>
+      <div class="swatch"><div class="swatch__chip" style="background: var(--fret-orange)"></div><span class="swatch__name">fret-orange</span><span class="swatch__meta">C</span></div>
+    </div>
+    <h3 class="ct-label">Gradientes de assinatura</h3>
+    <div class="doc-grid doc-grid--wide">
+      <div class="swatch"><div class="swatch__chip" style="background: var(--grad-sunset)"></div><span class="swatch__name">grad-sunset</span><span class="swatch__meta">sol · capas</span></div>
+      <div class="swatch"><div class="swatch__chip" style="background: var(--grad-neon)"></div><span class="swatch__name">grad-neon</span><span class="swatch__meta">progresso · slider</span></div>
+      <div class="swatch"><div class="swatch__chip" style="background: var(--grad-chrome)"></div><span class="swatch__name">grad-chrome</span><span class="swatch__meta">wordmark</span></div>
+    </div>
+  </section>
+
+  <!-- ═══ TIPOGRAFIA ═══ -->
+  <section class="doc-section" id="tipo">
+    <header>
+      <span class="ct-label">02 · Tipografia</span>
+      <h2>Três vozes, um trabalho cada</h2>
+    </header>
+    <div class="type-sample">
+      <span class="ct-label">Bungee · display · títulos e botões</span>
+      <span style="font-family: var(--font-display); font-size: var(--fs-display); line-height: var(--lh-tight)">Fim de jogo</span>
+    </div>
+    <div class="type-sample">
+      <span class="ct-label">Press Start 2P · só números e palavras fixas em inglês</span>
+      <span class="ct-numeric ct-neon-yellow" style="font-size: var(--fs-arcade-xl)">9.7 · 3 · 2 · 1</span>
+    </div>
+    <div class="type-sample">
+      <span class="ct-label">Silkscreen · HUD com texto · labels, nomes, ranking (acentuação completa)</span>
+      <span style="font-family: var(--font-arcade); font-size: var(--fs-arcade-lg); text-transform: uppercase; color: var(--neon-cyan)">Jogador 1 · Recorde · Insira seu nome · João</span>
+    </div>
+    <div class="type-sample">
+      <span class="ct-label">Rubik · leitura · corpo de texto e letra da música</span>
+      <p style="font-size: var(--fs-body-lg); max-width: var(--reading-max)">Use fone de ouvido: sem ele, o microfone escuta a música junto com você e a nota sai errada. Acentuação completa em português — ção, ãe, você.</p>
+      <p style="font-weight: var(--fw-black); font-size: var(--fs-lyric-current); -webkit-text-stroke: 1px var(--lyric-stroke)">Eu sei que vou te amar</p>
+    </div>
+  </section>
+
+  <!-- ═══ BOTÕES ═══ -->
+  <section class="doc-section" id="botoes">
+    <header>
+      <span class="ct-label">03 · Botões</span>
+      <h2>Aperta que afunda</h2>
+      <p>Botão físico: um bloco embaixo que "afunda" ao apertar. Um único primário rosa por tela.</p>
+    </header>
+    <div class="doc-row">
+      <button class="ct-btn ct-btn--primary"><svg><use href="#i-mic"/></svg>Cantar</button>
+      <button class="ct-btn ct-btn--secondary"><svg><use href="#i-upload"/></svg>Enviar MP3</button>
+      <button class="ct-btn ct-btn--ghost">Voltar</button>
+      <button class="ct-btn ct-btn--danger">Parar</button>
+      <button class="ct-btn ct-btn--primary" disabled>Desabilitado</button>
+    </div>
+    <div class="doc-row">
+      <button class="ct-btn ct-btn--primary ct-btn--sm">Pequeno</button>
+      <button class="ct-btn ct-btn--primary">Médio</button>
+      <button class="ct-btn ct-btn--primary ct-btn--lg">Grande</button>
+      <button class="ct-icon-btn" aria-label="Pausar"><svg><use href="#i-pause"/></svg></button>
+      <button class="ct-icon-btn" aria-label="Tocar"><svg><use href="#i-play"/></svg></button>
+    </div>
+    <div class="doc-row"><button class="ct-btn ct-btn--primary ct-btn--start">Press start</button></div>
+  </section>
+
+  <!-- ═══ FORMULÁRIOS ═══ -->
+  <section class="doc-section" id="forms">
+    <header>
+      <span class="ct-label">04 · Formulários</span>
+      <h2>Insira seu nome</h2>
+    </header>
+    <div class="doc-grid doc-grid--wide">
+      <div class="ct-field">
+        <label class="ct-field__label" for="f-search">Buscar música</label>
+        <div class="ct-search">
+          <svg class="ct-search__icon"><use href="#i-search"/></svg>
+          <input id="f-search" class="ct-input" type="search" placeholder="Artista ou título">
+        </div>
+      </div>
+      <div class="ct-field">
+        <label class="ct-field__label" for="f-name">Nome do jogador</label>
+        <input id="f-name" class="ct-input ct-name-entry" maxlength="20" placeholder="AAA" value="MATH">
+        <span class="ct-field__hint">Até 20 caracteres. Fica no ranking desta música.</span>
+      </div>
+      <div class="ct-field">
+        <label class="ct-field__label" for="f-err">Com erro</label>
+        <input id="f-err" class="ct-input" aria-invalid="true" aria-describedby="f-err-msg" value="<script>">
+        <span class="ct-field__error" id="f-err-msg"><svg width="16" height="16"><use href="#i-alert"/></svg>Use só letras, números, espaço, ponto, _ ou -.</span>
+      </div>
+      <div class="ct-field">
+        <label class="ct-field__label" for="f-offset">Ajuste da letra: <span id="offset-val" class="ct-numeric" style="color: var(--neon-cyan)">+0.0s</span></label>
+        <input id="f-offset" class="ct-range" type="range" min="-2000" max="2000" step="100" value="0">
+        <span class="ct-field__hint">Letra adiantada? Arraste para a direita.</span>
+      </div>
+    </div>
+    <label class="ct-dropzone">
+      <svg><use href="#i-upload"/></svg>
+      <strong style="font-family: var(--font-display); color: var(--text-primary); text-transform: uppercase">Solte o MP3 da música aqui</strong>
+      <span>Usamos só para aprender a melodia. O arquivo é apagado depois e fica só neste dispositivo.</span>
+      <input type="file" accept="audio/*" class="ct-sr-only">
+    </label>
+  </section>
+
+  <!-- ═══ SUPERFÍCIES ═══ -->
+  <section class="doc-section" id="superficies">
+    <header>
+      <span class="ct-label">05 · Superfícies e status</span>
+      <h2>Gabinete</h2>
+    </header>
+    <div class="doc-row">
+      <span class="ct-badge ct-badge--ready">Pronta</span>
+      <span class="ct-badge ct-badge--processing">Preparando</span>
+      <span class="ct-badge ct-badge--failed">Falhou</span>
+      <span class="ct-badge ct-badge--none">Sem referência</span>
+      <span class="ct-badge ct-badge--new-record">Novo recorde</span>
+    </div>
+    <div style="display: grid; gap: var(--space-3)">
+      <a class="ct-song-row" href="#karaoke">
+        <span class="ct-song-row__cover" aria-hidden="true"><img src="https://i.ytimg.com/vi/dQw4w9WgXcQ/default.jpg" alt=""></span>
+        <span><span class="ct-song-row__title">Eu Sei Que Vou Te Amar</span><br><span class="ct-song-row__artist">Tom Jobim · Vinicius de Moraes</span></span>
+        <span class="ct-song-row__meta"><span class="ct-numeric">3:12</span><span class="ct-badge ct-badge--ready">Pronta</span></span>
+      </a>
+      <a class="ct-song-row" href="#karaoke">
+        <span class="ct-song-row__cover" aria-hidden="true">T</span>
+        <span><span class="ct-song-row__title">Tempo Perdido</span><br><span class="ct-song-row__artist">Legião Urbana</span></span>
+        <span class="ct-song-row__meta"><span class="ct-numeric">5:01</span><span class="ct-badge ct-badge--processing">Preparando</span></span>
+      </a>
+    </div>
+    <div class="doc-grid doc-grid--wide">
+      <div class="ct-panel"><div class="ct-panel__header"><h3>Painel</h3><span class="ct-label">padrão</span></div><p style="color: var(--text-secondary)">Borda roxa discreta e brilho suave.</p></div>
+      <div class="ct-panel ct-panel--pink"><div class="ct-panel__header"><h3>Destaque</h3><span class="ct-label">pink</span></div><p style="color: var(--text-secondary)">Para o bloco principal da tela.</p></div>
+      <div class="ct-panel ct-panel--yellow"><div class="ct-panel__header"><h3>Recorde</h3><span class="ct-label">yellow</span></div><p style="color: var(--text-secondary)">Só para conquista.</p></div>
+    </div>
+    <div class="doc-grid doc-grid--wide">
+      <div class="ct-alert ct-alert--warning"><svg><use href="#i-headphones"/></svg><div><div class="ct-alert__title">Coloque o fone</div><div class="ct-alert__body">Sem fone, o microfone escuta a música e a nota sai errada.</div></div></div>
+      <div class="ct-alert ct-alert--danger"><svg><use href="#i-alert"/></svg><div><div class="ct-alert__title">Microfone bloqueado</div><div class="ct-alert__body">Libere o microfone no cadeado da barra de endereço e tente de novo.</div></div></div>
+    </div>
+  </section>
+
+
+  <!-- ═══ PREPARAR MÚSICA (YouTube) ═══ -->
+  <section class="doc-section" id="preparar">
+    <header>
+      <span class="ct-label">05b · Preparar a música</span>
+      <h2>Cole o link, a gente aprende a melodia</h2>
+      <p>O caminho principal é o link do YouTube, e o arquivo de áudio é a alternativa. Enquanto processa (2–3 min), a miniatura aparece numa TV de tubo e a espera ganha uma tela de loading.</p>
+    </header>
+    <div class="ct-panel" style="display: grid; gap: var(--space-5)">
+      <div class="ct-tabs" role="tablist" aria-label="Fonte do áudio" style="justify-self: start">
+        <button class="ct-tab" role="tab" aria-selected="true" aria-controls="tab-yt" id="t-yt"><svg><use href="#i-link"/></svg>Link do YouTube</button>
+        <button class="ct-tab" role="tab" aria-selected="false" aria-controls="tab-file" id="t-file"><svg><use href="#i-upload"/></svg>Enviar arquivo</button>
+      </div>
+      <div id="tab-yt" role="tabpanel" aria-labelledby="t-yt" class="ct-field">
+        <label class="ct-field__label" for="f-yt">Link do vídeo</label>
+        <div class="ct-input-group">
+          <input id="f-yt" class="ct-input" type="url" inputmode="url" placeholder="https://youtu.be/..." value="https://www.youtube.com/watch?v=dQw4w9WgXcQ">
+          <button class="ct-btn ct-btn--primary">Usar vídeo</button>
+        </div>
+        <span class="ct-field__hint">Prefira vídeos "official audio" ou "lyric video": clipes costumam ter introdução diferente. <a href="#preparar">Procurar no YouTube</a></span>
+      </div>
+    </div>
+    <div class="doc-grid" style="grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); align-items: center">
+      <figure class="ct-tv">
+        <div class="ct-tv__screen ct-crt"><img src="https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg" alt="Miniatura do vídeo escolhido"></div>
+        <figcaption class="ct-tv__caption"><span>youtu.be/dQw4w9WgXcQ</span></figcaption>
+      </figure>
+      <div class="ct-loading" aria-live="polite">
+        <span class="ct-badge ct-badge--processing">Preparando</span>
+        <span class="ct-loading__title">Aprendendo a melodia</span>
+        <div class="ct-loading__bar" role="progressbar" aria-label="Preparando a música"></div>
+        <span class="ct-loading__elapsed">01:24</span>
+        <p class="ct-loading__hint">Leva uns 2 a 3 minutos e só acontece uma vez por música. Pode escolher seu nome enquanto isso.</p>
+      </div>
+    </div>
+    <h3 class="ct-label">Download do áudio para cantar (progresso real)</h3>
+    <div style="display: grid; gap: var(--space-2); max-width: 420px">
+      <div class="ct-meter__head"><span class="ct-label">Baixando a música</span><span class="ct-numeric" style="font-size: var(--fs-sm); color: var(--neon-cyan)">62%</span></div>
+      <div class="ct-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="62" aria-label="Baixando a música"><div class="ct-progress__fill" style="--value: .62"></div></div>
+    </div>
+    <h3 class="ct-label">Erros da referência → mensagem</h3>
+    <div class="doc-grid doc-grid--wide">
+      <div class="ct-alert ct-alert--danger"><svg><use href="#i-alert"/></svg><div><div class="ct-alert__title">Esse vídeo não abre</div><div class="ct-alert__body">Ele é privado, tem restrição de idade ou foi removido. Tente outro link.</div></div></div>
+      <div class="ct-alert ct-alert--warning"><svg><use href="#i-alert"/></svg><div><div class="ct-alert__title">Duração não bate com a letra</div><div class="ct-alert__body">O vídeo tem 4:32 e a letra, 3:58. Procure a versão "official audio".</div></div></div>
+    </div>
+  </section>
+
+  <!-- ═══ KARAOKÊ ═══ -->
+  <section class="doc-section" id="karaoke">
+    <header>
+      <span class="ct-label">06 · Karaokê</span>
+      <h2>O palco</h2>
+      <p>HUD em cima, highway de afinação no meio (ciano = melodia original, rosa = sua voz) e a letra enchendo embaixo.</p>
+    </header>
+    <div class="ct-stage ct-crt demo-stage">
+      <div class="ct-hud">
+        <div class="ct-hud__item"><span class="ct-label">Jogador 1</span><span class="ct-hud__value ct-neon-pink">MATH</span></div>
+        <div class="ct-hud__item" style="flex: 1; max-width: 360px"><span class="ct-label">Tempo Perdido</span><div class="ct-progress"><div class="ct-progress__fill" id="song-progress" style="--value: .35"></div></div></div>
+        <div class="ct-hud__item" style="text-align: right"><span class="ct-label">Afinação</span><span class="ct-hud__value ct-neon-cyan" id="live-acc">87%</span></div>
+      </div>
+      <div class="ct-highway">
+        <div class="ct-highway__lane">
+          <span class="ct-gem ct-gem--green gem-demo" style="left: 6%"></span>
+          <span class="ct-gem ct-gem--red gem-demo" style="left: 26%; animation-delay: .5s"></span>
+          <span class="ct-gem ct-gem--yellow gem-demo" style="left: 46%; animation-delay: 1.1s"></span>
+          <span class="ct-gem ct-gem--blue gem-demo" style="left: 66%; animation-delay: 1.6s"></span>
+          <span class="ct-gem ct-gem--orange gem-demo" style="left: 86%; animation-delay: .8s"></span>
+        </div>
+        <div class="ct-highway__hitline"></div>
+        <div style="position: absolute; right: var(--space-5); top: var(--space-4); display: grid; gap: var(--space-2); justify-items: end;">
+          <span class="ct-hit ct-hit--perfect">Perfect</span>
+          <span class="ct-hit ct-hit--good" style="animation-delay: .15s">Good</span>
+          <span class="ct-hit ct-hit--miss" style="animation-delay: .3s">Miss</span>
+        </div>
+      </div>
+      <div class="ct-lyrics" aria-live="polite">
+        <p class="ct-lyric is-past">Todos os dias quando acordo</p>
+        <p class="ct-lyric is-current" id="demo-line" style="--progress: 0"><span class="ct-lyric__text">Não tenho mais o tempo que passou</span></p>
+        <p class="ct-lyric is-next">Mas tenho muito tempo</p>
+      </div>
+    </div>
+    <div class="doc-row" style="justify-content: center">
+      <div class="ct-countdown" style="font-size: var(--fs-arcade-xl); animation-iteration-count: infinite; animation-duration: 1s" aria-hidden="true">3</div>
+    </div>
+  </section>
+
+  <!-- ═══ PLACAR ═══ -->
+  <section class="doc-section" id="placar">
+    <header>
+      <span class="ct-label">07 · Resultado</span>
+      <h2>Fim de jogo</h2>
+      <p>Nota em Press Start com contagem subindo, conceito arcade (S/A/B/C/D), medidores de LED e o ranking HIGH SCORES com a sua linha piscando.</p>
+    </header>
+    <div class="doc-grid" style="align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr))">
+      <div class="ct-panel ct-panel--pink" style="display: grid; gap: var(--space-6); justify-items: center; padding: var(--space-7) var(--space-5)">
+        <span class="ct-badge ct-badge--new-record">Novo recorde</span>
+        <div style="display: flex; align-items: center; gap: var(--space-6); flex-wrap: wrap; justify-content: center">
+          <div class="ct-score">
+            <span class="ct-label">Sua nota</span>
+            <span class="ct-score__value"><span id="score-count">8.4</span><span class="ct-score__max">/10</span></span>
+          </div>
+          <span class="ct-grade" data-grade="A">A</span>
+        </div>
+        <div style="display: grid; gap: var(--space-4); width: 100%">
+          <div class="ct-meter ct-meter--pitch">
+            <div class="ct-meter__head"><span class="ct-label">Afinação</span><span class="ct-numeric ct-neon-cyan">8.9</span></div>
+            <div class="ct-meter__bar" style="--value: .89" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="8.9" aria-label="Afinação"></div>
+          </div>
+          <div class="ct-meter ct-meter--timing">
+            <div class="ct-meter__head"><span class="ct-label">Tempo</span><span class="ct-numeric ct-neon-pink">7.2</span></div>
+            <div class="ct-meter__bar" style="--value: .72" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="7.2" aria-label="Tempo"></div>
+          </div>
+        </div>
+        <div class="doc-row"><button class="ct-btn ct-btn--primary">Cantar de novo</button><button class="ct-btn ct-btn--secondary">Outra música</button></div>
+      </div>
+      <div class="ct-marquee">
+        <table class="ct-ranking">
+          <caption>High scores</caption>
+          <thead><tr><th scope="col">#</th><th scope="col">Nome</th><th scope="col">Nota</th></tr></thead>
+          <tbody>
+            <tr><td>1st</td><td>ANA</td><td>9.7</td></tr>
+            <tr><td>2nd</td><td>JOTA</td><td>9.1</td></tr>
+            <tr class="is-you"><td>3rd</td><td>MATH</td><td>8.4</td></tr>
+            <tr><td>4th</td><td>BIA</td><td>7.8</td></tr>
+            <tr><td>5th</td><td>LEO</td><td>6.3</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <h3 class="ct-label">Conceitos</h3>
+    <div class="doc-row">
+      <span class="ct-grade" data-grade="S" style="font-size: var(--fs-h1)">S</span>
+      <span class="ct-grade" data-grade="A" style="font-size: var(--fs-h1)">A</span>
+      <span class="ct-grade" data-grade="B" style="font-size: var(--fs-h1)">B</span>
+      <span class="ct-grade" data-grade="C" style="font-size: var(--fs-h1)">C</span>
+      <span class="ct-grade" data-grade="D" style="font-size: var(--fs-h1)">D</span>
+    </div>
+  </section>
+
+  <!-- ═══ VOZ ═══ -->
+  <section class="doc-section" id="voz" style="border-bottom: 0">
+    <header>
+      <span class="ct-label">08 · Voz e texto</span>
+      <h2>Locutor animado, não robô</h2>
+      <p>Português do Brasil, frases curtas, energia de arcade. Os termos de jogo em inglês (PRESS START, HIGH SCORE, PERFECT) ficam só no HUD.</p>
+    </header>
+    <div class="do-dont">
+      <div class="ct-panel"><h3 class="ct-neon-cyan" style="margin-bottom: var(--space-3)">Assim</h3>
+        <ul><li>"Coloque o fone e aperte START."</li><li>"Novo recorde. Seu nome está no topo."</li><li>"Quase lá. Faltou entrar no tempo em 3 versos."</li><li>"Preparando a música… leva uns 2 minutos."</li></ul></div>
+      <div class="ct-panel"><h3 class="ct-neon-pink" style="margin-bottom: var(--space-3)">Não assim</h3>
+        <ul><li>"Erro 409: ReferenceAlreadyProcessing" (mostrar técnico)</li><li>"Você foi péssimo" (humilhar: a nota já fala)</li><li>Emoji como ícone (use SVG com traço 2px)</li><li>Mais de uma exclamação por tela</li></ul></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  // demos da vitrine — respeitam movimento reduzido
+  document.querySelectorAll('.ct-tabs').forEach((list) => {
+    list.addEventListener('click', (e) => {
+      const tab = e.target.closest('.ct-tab');
+      if (!tab) return;
+      list.querySelectorAll('.ct-tab').forEach((t) => t.setAttribute('aria-selected', String(t === tab)));
+    });
+  });
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const offset = document.getElementById('f-offset');
+  const offsetVal = document.getElementById('offset-val');
+  offset.addEventListener('input', () => {
+    const s = Number(offset.value) / 1000;
+    offsetVal.textContent = (s >= 0 ? '+' : '') + s.toFixed(1) + 's';
+  });
+
+  const line = document.getElementById('demo-line');
+  const progress = document.getElementById('song-progress');
+  const acc = document.getElementById('live-acc');
+  if (reduce) {
+    line.style.setProperty('--progress', '0.6');
+  } else {
+    let t = 0;
+    setInterval(() => {
+      t = (t + 0.01) % 1.3;
+      line.style.setProperty('--progress', Math.min(t, 1).toFixed(3));
+      progress.style.setProperty('--value', (0.35 + Math.min(t, 1) * 0.1).toFixed(3));
+      if (Math.random() < 0.08) acc.textContent = (80 + Math.floor(Math.random() * 18)) + '%';
+    }, 40);
+
+    // contagem da nota subindo
+    const el = document.getElementById('score-count');
+    const target = 8.4;
+    const io = new IntersectionObserver(([e]) => {
+      if (!e.isIntersecting) return;
+      io.disconnect();
+      const start = performance.now();
+      const dur = 1200;
+      const tick = (now) => {
+        const p = Math.min((now - start) / dur, 1);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = (target * eased).toFixed(1);
+        if (p < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    io.observe(el);
   }
-}
 </script>
 </body>
 </html>
