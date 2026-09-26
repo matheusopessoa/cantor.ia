@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { app } from "../../app.js";
 import { prisma } from "../../utils/prisma.js";
 import type { PitchTrack } from "../../utils/validators.js";
+import { Prisma } from "../../generated/prisma/client.js";
 import { melody, seedReadySong, seedSong } from "../helpers/songs.js";
-import { detuneFrom, silence } from "../helpers/tracks.js";
+import { detuneFrom, shiftLines, silence } from "../helpers/tracks.js";
 
 function submit(id: string, body: Record<string, unknown>) {
   return app.inject({ method: "POST", url: `/api/songs/${id}/performances`, payload: body });
@@ -67,6 +68,42 @@ describe("POST /api/songs/:id/performances", () => {
       coverage: response.json().coverage,
     });
     expect((stored.sungTrack as PitchTrack).midi).toEqual(sung.midi);
+  });
+
+  // Na melodia sintética as frases vêm a cada ~3 s: uma letra 3 s fora ainda acharia a entrada
+  // da frase seguinte na janela de ±800 ms da nota. 1,5 s cai no meio das frases.
+  const LYRICS_LATE_MS = 1_500;
+
+  it("a nota avalia a letra alinhada ao áudio, não a original (sdd-007)", async () => {
+    // Letra do LRCLIB atrasada; o alinhamento gravado a colocou em cima da referência.
+    const song = await seedReadySong({
+      lyrics: shiftLines(melody.lines, LYRICS_LATE_MS),
+      alignedLyrics: melody.lines,
+      lyricsAlignment: { aligned: true, shiftMs: -LYRICS_LATE_MS, matchedRatio: 1 },
+    });
+
+    const response = await submit(song.id, perfect);
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().timingScore).toBeGreaterThanOrEqual(8);
+    // `lines[].startMs` é o da linha avaliada (a alinhada), não o do LRC original (risco R6).
+    expect(response.json().lines.map((line: { startMs: number }) => line.startMs)).toEqual(
+      melody.lines.map((line) => line.startMs),
+    );
+  });
+
+  it("sem alinhamento, a mesma cantoria com a letra fora do tempo perde na nota de tempo", async () => {
+    const song = await seedReadySong({
+      lyrics: shiftLines(melody.lines, LYRICS_LATE_MS),
+      alignedLyrics: Prisma.DbNull,
+      lyricsAlignment: { aligned: false, shiftMs: 0, matchedRatio: 0 },
+    });
+
+    const response = await submit(song.id, perfect);
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json().timingScore).toBeLessThan(5);
+    expect(response.json().pitchScore).toBe(10); // a afinação não depende da letra
   });
 
   it("nunca devolve sungTrack nem a referência na resposta", async () => {
@@ -134,10 +171,10 @@ describe("POST /api/songs/:id/performances", () => {
     expect(response.statusCode).toBe(400);
   });
 
-  it("offsetMs fora de ±2000 → 400", async () => {
+  it("offsetMs fora de ±10000 → 400", async () => {
     const song = await seedReadySong();
 
-    const response = await submit(song.id, { ...perfect, offsetMs: 2_001 });
+    const response = await submit(song.id, { ...perfect, offsetMs: 10_001 });
 
     expect(response.statusCode).toBe(400);
   });

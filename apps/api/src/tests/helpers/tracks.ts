@@ -142,3 +142,20 @@ export function randomNotes(seed: number, durationMs: number): PitchTrack {
 export function shiftLines(lines: LyricLine[], ms: number): LyricLine[] {
   return lines.map((line) => ({ ...line, startMs: line.startMs + ms }));
 }
+
+/**
+ * Escala o instante de todas as linhas (`factor` > 1 = letra mais lenta). Simula letra
+ * cronometrada numa gravação com andamento diferente do áudio.
+ */
+export function scaleLines(lines: LyricLine[], factor: number): LyricLine[] {
+  return lines.map((line) => ({ ...line, startMs: Math.round(line.startMs * factor) }));
+}
+
+/** Desloca cada linha por um valor uniforme em [-maxMs, maxMs], seedado (múltiplos de 10 ms). */
+export function jitterLines(lines: LyricLine[], seed: number, maxMs: number): LyricLine[] {
+  const rand = mulberry32(seed);
+  return lines.map((line) => {
+    const jitter = Math.round(between(rand, -maxMs, maxMs) / HOP_MS) * HOP_MS;
+    return { ...line, startMs: Math.max(0, line.startMs + jitter) };
+  });
+}

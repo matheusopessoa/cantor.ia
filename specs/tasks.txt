@@ -51,7 +51,49 @@ Fora do MVP: acerto de letra via Whisper, tempo por palavra, instrumental, login
 
 ---
 
-Pendente (ainda não planejado — virará sdd-007):
+7. sdd-007-lyrics-alignment — alinhar automaticamente a letra (LRC do LRCLIB) ao áudio que
+   toca. Problema (usuário, 2026-09-25): a letra foi cronometrada em outra gravação; o slider
+   manual de ±2 s só corrige um deslocamento global pequeno e não resolve intro diferente (a
+   API aceita até 10 s de diferença de duração), andamento diferente (o erro cresce ao longo da
+   música) nem linhas fora do lugar. "Está impossível reconciliar manualmente."
+   Solução: na API, quando a referência fica READY, casar os inícios de linha do LRC com os
+   inícios de frase da referência de pitch (frames com voz): estimar o deslocamento global por
+   varredura (−12 s a +12 s), a deriva de andamento por regressão robusta e encaixar cada linha
+   no onset mais próximo, garantindo ordem crescente. Persistir a letra alinhada no Song e
+   devolvê-la no SongDto; a nota e o web passam a usar a letra alinhada, e o slider vira ajuste
+   fino. Função pura e testável com referência sintética. Fora do escopo: alinhamento por
+   transcrição (Whisper) para versões com estrutura diferente (fica como sdd futura).
+
+---
+
+8. sdd-008-youtube-suggestion — sugerir sozinho o vídeo do YouTube da música, para o usuário
+   não precisar procurar nem correr o risco de colar a versão errada (pedido do usuário,
+   2026-09-25: "é bom que o algoritmo já busque no YouTube a oficial relacionada"). O worker
+   ganha uma busca com yt-dlp (`ytsearch`, sem baixar nada, sem chave de API); a API monta a
+   consulta a partir de artista + título, descarta o que não tem a duração da letra (±10 s) e
+   ranqueia em duas camadas: primeiro o oficial (canal "- Topic", "official audio", canal do
+   artista); quando não existe oficial, o vídeo com mais visualizações entre os que têm a
+   duração certa (ajuste do usuário: "nem sempre tem o oficial"). Ao vivo, cover, remix,
+   karaokê e instrumental são rebaixados. O web mostra o melhor candidato com "Usar este
+   vídeo" e os demais como alternativa, mantendo o campo de colar link. Decisão do usuário:
+   sempre pedir o clique (nada de processar sozinho). Mesma ressalva do download: uso pessoal.
+
+---
+
+9. sdd-009-difficulty-levels — três dificuldades. Fácil: não mede afinação, só letra no tempo
+   (entrada de cada verso, já existe) e ritmo (cantar quando a referência tem voz e calar
+   quando não tem), 50 % cada (pedido do usuário, 2026-09-25: "não medir o tom, apenas se
+   acertou os tempos letra e ritmo"). Médio: afinação com tolerância dobrada (crédito cheio
+   até 100 cents, zero a partir de 200) e pesos 0,5 afinação / 0,25 tempo / 0,25 ritmo, porque
+   "para quem não sabe cantar bem fica dando só MISS no nível único que existe hoje". Difícil:
+   limiares de hoje (50/100 cents) com pesos 0,5 afinação / 0,5 tempo (pesos definidos pelo
+   usuário em 2026-09-25; hoje é 0,7/0,3). A performance guarda a dificuldade e o ranking passa a ser por música e
+   dificuldade. No web: escolha Fácil | Médio | Difícil na preparação (padrão Médio), feedback
+   PERFECT/GOOD/MISS com os limiares do nível, HUD com "Ritmo" e feedback ON TIME / MISS no
+   fácil, resultado com os medidores do nível. Implementar depois da sdd-007 (a letra alinhada
+   é pré-requisito de qualquer nota de tempo justa).
+
+Pendente (ainda não planejado — virará sdd-010):
 
 Adicionar endpoint de refresh token no fluxo de autenticação da API.
 

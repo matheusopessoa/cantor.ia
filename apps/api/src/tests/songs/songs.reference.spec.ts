@@ -3,8 +3,8 @@ import { app, UPLOAD_MAX_BYTES } from "../../app.js";
 import { WorkerClientError, workerClient } from "../../clients/worker.client.js";
 import { PROCESSING_STALE_MS } from "../../repositories/song.repository.js";
 import { prisma } from "../../utils/prisma.js";
-import { melody, multipartFile, seedReadySong, seedSong, SONG_MS, waitForReferenceStatus } from "../helpers/songs.js";
-import { makeTrack } from "../helpers/tracks.js";
+import { melody, multipartFile, PERFECT_ALIGNMENT, seedReadySong, seedSong, SONG_MS, waitForReferenceStatus } from "../helpers/songs.js";
+import { makeTrack, shiftLines } from "../helpers/tracks.js";
 
 vi.mock("../../clients/worker.client.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../clients/worker.client.js")>();
@@ -63,6 +63,59 @@ describe("POST /api/songs/:id/reference (upload)", () => {
     expect(stored.referenceAudioMs).toBe(SONG_MS);
     expect(stored.referenceError).toBeNull();
     expect(stored.youtubeVideoId).toBeNull();
+    expect(stored.alignedLyrics).toEqual(melody.lines);
+    expect(stored.lyricsAlignment).toEqual(PERFECT_ALIGNMENT);
+  });
+
+  it("ao ficar READY, a letra é alinhada ao áudio da referência (sdd-007)", async () => {
+    // Letra cronometrada 3 s atrasada em relação ao áudio que toca.
+    const song = await seedSong({ lyrics: shiftLines(melody.lines, 3_000) });
+    vi.mocked(workerClient.extract).mockResolvedValue(melody.track);
+
+    await upload(song.id);
+
+    const stored = await waitForReferenceStatus(song.id, "READY");
+    expect(stored.alignedLyrics).toEqual(melody.lines);
+    expect(stored.lyricsAlignment).toEqual({ aligned: true, shiftMs: -3_000, matchedRatio: 1 });
+  });
+
+  it("referência sem relação com a letra → READY sem alignedLyrics e aligned false", async () => {
+    const song = await seedSong();
+    const unrelated = makeTrack(new Array<number | null>(SONG_MS / 10).fill(60)); // voz contínua: 1 onset só
+    vi.mocked(workerClient.extract).mockResolvedValue(unrelated);
+
+    await upload(song.id);
+
+    const stored = await waitForReferenceStatus(song.id, "READY");
+    expect(stored.alignedLyrics).toBeNull();
+    expect(stored.lyricsAlignment).toMatchObject({ aligned: false });
+  });
+
+  it("novo claim e FAILED zeram o alinhamento da referência anterior", async () => {
+    const song = await seedSong({
+      referenceStatus: "FAILED",
+      referenceError: "NO_VOICE",
+      alignedLyrics: melody.lines,
+      lyricsAlignment: PERFECT_ALIGNMENT,
+    });
+    let fail!: () => void;
+    vi.mocked(workerClient.extract).mockReturnValue(
+      new Promise((_resolve, reject) => {
+        fail = () => reject(new WorkerClientError("no_voice", "nenhum frame com voz"));
+      }),
+    );
+
+    await upload(song.id);
+
+    const claimed = await prisma.song.findUniqueOrThrow({ where: { id: song.id } });
+    expect(claimed.referenceStatus).toBe("PROCESSING");
+    expect(claimed.alignedLyrics).toBeNull();
+    expect(claimed.lyricsAlignment).toBeNull();
+
+    fail();
+    const failed = await waitForReferenceStatus(song.id, "FAILED");
+    expect(failed.alignedLyrics).toBeNull();
+    expect(failed.lyricsAlignment).toBeNull();
   });
 
   it("worker falha → FAILED com o código traduzido", async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findOnset, fold12, median } from "../../utils/pitch.js";
+import { findOnset, fold12, median, voicedSegments } from "../../utils/pitch.js";
 
 describe("fold12", () => {
   it("mantém diferenças pequenas", () => {
@@ -84,5 +84,54 @@ describe("findOnset", () => {
   it("tolera janela fora dos limites do track", () => {
     expect(findOnset(withVoice(2, 30), -50, 500, 5)).toBe(2);
     expect(findOnset(withVoice(2, 30), 200, 300, 5)).toBeNull();
+  });
+});
+
+describe("voicedSegments", () => {
+  const silent = new Array<number | null>(100).fill(null);
+
+  function withVoice(from: number, to: number, base: (number | null)[] = silent): (number | null)[] {
+    return base.map((value, i) => (i >= from && i < to ? 60 : value));
+  }
+
+  it("sem voz devolve lista vazia", () => {
+    expect(voicedSegments(silent, 10, 250, 80)).toEqual([]);
+    expect(voicedSegments([], 10, 250, 80)).toEqual([]);
+  });
+
+  it("um trecho contínuo vira um segmento em ms (fim exclusivo)", () => {
+    expect(voicedSegments(withVoice(20, 60), 10, 250, 80)).toEqual([{ startMs: 200, endMs: 600 }]);
+  });
+
+  it("une trechos separados por buraco de até mergeGapMs", () => {
+    const track = withVoice(30, 50, withVoice(0, 10)); // buraco de 20 frames = 200 ms
+    expect(voicedSegments(track, 10, 250, 80)).toEqual([{ startMs: 0, endMs: 500 }]);
+  });
+
+  it("não une quando o buraco passa de mergeGapMs", () => {
+    const track = withVoice(36, 50, withVoice(0, 10)); // buraco de 26 frames = 260 ms
+    expect(voicedSegments(track, 10, 250, 80)).toEqual([
+      { startMs: 0, endMs: 100 },
+      { startMs: 360, endMs: 500 },
+    ]);
+  });
+
+  it("descarta trechos mais curtos que minSegmentMs, depois de unir", () => {
+    expect(voicedSegments(withVoice(10, 17), 10, 250, 80)).toEqual([]); // 70 ms
+    expect(voicedSegments(withVoice(10, 18), 10, 250, 80)).toEqual([{ startMs: 100, endMs: 180 }]); // 80 ms
+    // Dois ruídos de 50 ms a 100 ms um do outro formam um trecho de 200 ms.
+    expect(voicedSegments(withVoice(25, 30, withVoice(10, 15)), 10, 250, 80)).toEqual([{ startMs: 100, endMs: 300 }]);
+  });
+
+  it("voz até o último frame fecha no fim do track", () => {
+    expect(voicedSegments(withVoice(90, 100), 10, 250, 80)).toEqual([{ startMs: 900, endMs: 1000 }]);
+  });
+
+  it("devolve em ordem crescente", () => {
+    const track = withVoice(70, 90, withVoice(30, 40));
+    expect(voicedSegments(track, 10, 250, 80)).toEqual([
+      { startMs: 300, endMs: 400 },
+      { startMs: 700, endMs: 900 },
+    ]);
   });
 });

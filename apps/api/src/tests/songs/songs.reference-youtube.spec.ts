@@ -3,7 +3,7 @@ import { app } from "../../app.js";
 import { WorkerClientError, workerClient, type WorkerClientErrorCode } from "../../clients/worker.client.js";
 import { prisma } from "../../utils/prisma.js";
 import { melody, multipartFile, seedReadySong, seedSong, SONG_MS, VIDEO_ID, waitForReferenceStatus } from "../helpers/songs.js";
-import { makeTrack } from "../helpers/tracks.js";
+import { makeTrack, shiftLines } from "../helpers/tracks.js";
 
 vi.mock("../../clients/worker.client.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../clients/worker.client.js")>();
@@ -61,6 +61,17 @@ describe("POST /api/songs/:id/reference/youtube", () => {
     expect(stored.referenceAudioMs).toBe(SONG_MS);
   });
 
+  it("worker ok → letra alinhada ao áudio do vídeo (sdd-007)", async () => {
+    const song = await seedSong({ lyrics: shiftLines(melody.lines, 1_500) });
+    vi.mocked(workerClient.extractFromYoutube).mockResolvedValue(melody.track);
+
+    await fromYoutube(song.id);
+
+    const stored = await waitForReferenceStatus(song.id, "READY");
+    expect(stored.alignedLyrics).toEqual(melody.lines);
+    expect(stored.lyricsAlignment).toEqual({ aligned: true, shiftMs: -1_500, matchedRatio: 1 });
+  });
+
   it.each<[WorkerClientErrorCode, string]>([
     ["video_unavailable", "VIDEO_UNAVAILABLE"],
     ["too_long", "TOO_LONG"],
@@ -83,6 +94,8 @@ describe("POST /api/songs/:id/reference/youtube", () => {
     expect(stored.referenceError).toBe(referenceError);
     expect(stored.youtubeVideoId).toBeNull();
     expect(stored.referenceTrack).toBeNull();
+    expect(stored.alignedLyrics).toBeNull();
+    expect(stored.lyricsAlignment).toBeNull();
   });
 
   it("erro que não é do worker → FAILED com INTERNAL", async () => {

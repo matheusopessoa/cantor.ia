@@ -46,16 +46,30 @@ diretamente, o que mantém o código curto e fácil de navegar.
   devolve a nota de 0 a 10 (`ScoreResult`: nota final, afinação, tempo, transposição detectada,
   cobertura e resultado por linha). As constantes de calibração ficam em `SCORING_CONFIG`.
   Algoritmo e critérios em [`specs/sdd-002-scoring/tasks.md`](../../../specs/sdd-002-scoring/tasks.md).
+- [`alignment.service.ts`](../src/services/alignment.service.ts) — também função pura, sem
+  repositório: `align(lines, reference)` encaixa a letra do LRCLIB (cronometrada em outra
+  gravação) no áudio da referência. Acha os inícios de frase da referência (`voicedSegments`
+  + silêncio ≥ 350 ms), procura um deslocamento global em ±12 s e encaixa cada linha com
+  texto no início de frase livre a até 350 ms; as demais recebem só o deslocamento. **Nunca
+  muda a velocidade da letra.** Menos da metade das linhas encaixadas → `aligned: false` e
+  `lines: null` (o consumidor usa a letra original). Constantes em `ALIGNMENT_CONFIG`;
+  algoritmo em [`specs/sdd-007-lyrics-alignment/tasks.md`](../../../specs/sdd-007-lyrics-alignment/tasks.md).
 - [`song.service.ts`](../src/services/song.service.ts) — busca no LRCLIB (só faixas com letra
   sincronizada, máx. 20, com o estado local anexado em 1 query), cadastro idempotente por
   `lrclibId`, `SongDto` (nunca inclui `referenceTrack`) e o ciclo da referência: o claim
   atômico para `PROCESSING`, o processamento **em background** (a rota responde 202 e o
   service chama o worker sem `await`), a checagem de duração (±10 s → `DURATION_MISMATCH`)
   e a tradução dos códigos do worker para `ReferenceErrorCode` (`toReferenceErrorCode`).
-  Também serve o áudio para tocar (`getAudio`), repassando o stream do worker.
+  Ao ficar `READY`, alinha a letra à curva recém-extraída (`alignmentService`, sem query
+  extra) e grava `alignedLyrics` + `lyricsAlignment` junto com a referência; `GET /:id`
+  faz o backfill de músicas `READY` anteriores à sdd-007 (sem `lyricsAlignment`) na
+  primeira leitura, uma vez por música. Também serve o áudio para tocar (`getAudio`),
+  repassando o stream do worker.
 - [`performance.service.ts`](../src/services/performance.service.ts) — nota via
-  `scoringService`, persistência e posição no ranking (`rank` = nº de performances com nota
-  maior + 1), além do ranking top N. Sem login: o jogador informa só um nome.
+  `scoringService` sobre `alignedLyrics ?? lyrics` (o `offsetMs` do jogador é ajuste fino
+  sobre a letra alinhada; `lines[].startMs` do resultado é o da linha avaliada),
+  persistência e posição no ranking (`rank` = nº de performances com nota maior + 1), além
+  do ranking top N. Sem login: o jogador informa só um nome.
 - Plano e regras de negócio: [`specs/sdd-003-api-songs/tasks.md`](../../../specs/sdd-003-api-songs/tasks.md).
 
 ## `src/repositories/`
@@ -65,9 +79,13 @@ diretamente, o que mantém o código curto e fácil de navegar.
   DTO acontece no service.
 - [`song.repository.ts`](../src/repositories/song.repository.ts) — consultas de `Song` com
   `select` explícito **sem** `referenceTrack` (pode passar de 400 KB); só
-  `findWithReference` carrega o campo. `claimForProcessing` é um `updateMany` condicional
-  (status `NONE`/`FAILED`, ou `PROCESSING` há mais de `PROCESSING_STALE_MS` = 15 min): é o
-  que garante um único processamento por música mesmo com requisições simultâneas.
+  `findWithReference` carrega o campo. O `select` inclui `alignedLyrics` e
+  `lyricsAlignment` (sdd-007): `markReady` grava os dois junto com a curva,
+  `saveAlignment` faz o backfill, e `claimForProcessing`/`markFailed` zeram ambos (o
+  alinhamento vale só para a referência atual). `claimForProcessing` é um `updateMany`
+  condicional (status `NONE`/`FAILED`, ou `PROCESSING` há mais de `PROCESSING_STALE_MS` =
+  15 min): é o que garante um único processamento por música mesmo com requisições
+  simultâneas.
 - [`performance.repository.ts`](../src/repositories/performance.repository.ts) — cria a
   performance, conta as melhores (`countBetter`) e lista o ranking (nota desc, empate por
   `createdAt` asc), usando o índice `(songId, score desc)`.
@@ -98,14 +116,17 @@ Peças compartilhadas, sem estado de negócio:
   para busca de e-mail. Depende da variável de ambiente `EMAIL_BINDEX_SECRET`.
 - [`validators.ts`](../src/utils/validators.ts) — schemas Zod dos contratos: corpos das rotas
   de auth, os formatos compartilhados `pitchTrackSchema` (curva de pitch do worker, contrato
-  em `specs/sdd-001-worker-pitch/tasks.md` §4) e `lyricLineSchema` (linha do LRC), com os
-  tipos `PitchTrack` e `LyricLine` inferidos, e os schemas das rotas de músicas
+  em `specs/sdd-001-worker-pitch/tasks.md` §4), `lyricLineSchema` (linha do LRC) e
+  `lyricsAlignmentSchema` (diagnóstico do alinhamento, sdd-007), com os tipos `PitchTrack`,
+  `LyricLine` e `LyricsAlignment` inferidos, e os schemas das rotas de músicas
   (`songSearchQuerySchema`, `createSongBodySchema`, `songParamsSchema`,
   `youtubeReferenceBodySchema`, `performanceBodySchema` com `playerNameSchema`,
   `rankingQuerySchema`).
 - [`pitch.ts`](../src/utils/pitch.ts) — matemática pura sobre curvas de pitch: `fold12`
-  (diferença em semitons módulo oitava, em [-6, 6)), `median` e `findOnset` (primeiro início
-  de voz numa janela de frames). Usado pelo `scoring.service.ts`.
+  (diferença em semitons módulo oitava, em [-6, 6)), `median`, `findOnset` (primeiro início
+  de voz numa janela de frames) e `voicedSegments` (trechos contínuos com voz, em ms, unindo
+  buracos curtos e descartando ruído). Usados por `scoring.service.ts` e
+  `alignment.service.ts`.
 - [`lrc.ts`](../src/utils/lrc.ts) — `parseLrc`: letra sincronizada (LRC) → `LyricLine[]`.
   Aceita `[mm:ss.xx]`/`[mm:ss.xxx]`, várias tags por linha, ignora metadados, preserva
   linhas vazias (instrumentais) e ordena por `startMs`.

@@ -218,7 +218,7 @@
     .regex(/^[\p{L}\p{N} ._-]+$/u);
   export const performanceBodySchema = z.object({
     playerName: playerNameSchema,
-    offsetMs: z.number().int().min(-2000).max(2000).default(0),
+    offsetMs: z.number().int().min(-10_000).max(10_000).default(0),   // ±2 s no plano original; ±10 s desde 2026-09-25 (pedido do usuário)
     track: pitchTrackSchema,
   });
   export const rankingQuerySchema = z.object({ limit: z.coerce.number().int().min(1).max(50).default(10) });

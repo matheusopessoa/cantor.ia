@@ -2,7 +2,8 @@
  * Helpers matemáticos puros para curvas de pitch (`PitchTrack.midi`: uma nota MIDI
  * fracionária a cada frame, ou `null` quando não há voz).
  *
- * Sem estado de negócio: as regras da nota vivem em `services/scoring.service.ts`.
+ * Sem estado de negócio: as regras da nota vivem em `services/scoring.service.ts` e as do
+ * alinhamento da letra em `services/alignment.service.ts`.
  */
 
 /**
@@ -74,4 +75,54 @@ export function findOnset(
   }
 
   return null;
+}
+
+export interface VoicedSegment {
+  /** Início do trecho com voz, em ms (inclusivo). */
+  startMs: number;
+  /** Fim do trecho, em ms (exclusivo: primeiro frame sem voz). */
+  endMs: number;
+}
+
+/**
+ * Trechos contínuos com voz de uma curva de pitch, em ms.
+ *
+ * - Frames `!= null` consecutivos formam um trecho.
+ * - Buracos (frames sem voz) de até `mergeGapMs` entre dois trechos são unidos: uma
+ *   consoante ou respiração curta não quebra a frase.
+ * - Trechos com menos de `minSegmentMs` (depois de unir) são descartados como ruído.
+ *
+ * Devolve em ordem crescente. Usado pelo `alignment.service.ts` para achar os inícios de
+ * frase da referência.
+ */
+export function voicedSegments(
+  track: readonly (number | null)[],
+  hopMs: number,
+  mergeGapMs: number,
+  minSegmentMs: number,
+): VoicedSegment[] {
+  const raw: VoicedSegment[] = [];
+  let start: number | null = null;
+
+  for (let i = 0; i <= track.length; i++) {
+    const voiced = i < track.length && track[i] != null;
+    if (voiced && start === null) {
+      start = i;
+    } else if (!voiced && start !== null) {
+      raw.push({ startMs: start * hopMs, endMs: i * hopMs });
+      start = null;
+    }
+  }
+
+  const merged: VoicedSegment[] = [];
+  for (const segment of raw) {
+    const last = merged[merged.length - 1];
+    if (last !== undefined && segment.startMs - last.endMs <= mergeGapMs) {
+      last.endMs = segment.endMs;
+    } else {
+      merged.push({ ...segment });
+    }
+  }
+
+  return merged.filter((segment) => segment.endMs - segment.startMs >= minSegmentMs);
 }

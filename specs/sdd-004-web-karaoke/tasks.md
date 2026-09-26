@@ -197,7 +197,7 @@
 | 3 | — | Áudio para tocar: cache no IndexedDB → download via API (se houver `youtubeVideoId`) → seletor de arquivo. O arquivo escolhido no seletor nunca é enviado ao servidor | Decisão do usuário ("Descartar") |
 | 4 | — | Áudio (do cache, do download ou do seletor) com duração diferente de `song.durationMs` em mais de 10 s é recusado | Mesmo critério da API (sdd-003 regra 7) |
 | 5 | — | Aviso fixo de "use fone de ouvido" antes de começar: sem fone, o microfone capta a música | MVP |
-| 6 | — | Offset da letra ajustável de −2 a +2 s (passos de 100 ms). É enviado como `offsetMs` e memorizado por música no dispositivo | MVP ("slider de ±2 s") |
+| 6 | — | Offset da letra ajustável de −10 a +10 s (passos de 100 ms). É enviado como `offsetMs` e memorizado por música no dispositivo. Só desloca a letra, nunca muda a velocidade: se a letra acabar antes ou depois do áudio, é esperado e não é erro | MVP ("slider de ±2 s"); faixa ampliada para ±10 s a pedido do usuário em 2026-09-25 (mesmo limite da tolerância de duração) |
 | 7 | — | "Terminar" antes do fim envia a performance parcial (a nota reflete a cobertura). "Parar" descarta | Evita nota sem querer |
 | 8 | — | Resultado mostra nota, afinação, tempo, posição e ranking com a performance atual destacada | Fliperama |
 | 9 | — | Copy em pt-BR com energia de fliperama, sem emoji (DS, seção "Voz e texto"). Nota em Press Start 2P (`.ct-score`) + conceito S/A/B/C/D (`.ct-grade`) | Design system |
@@ -263,7 +263,7 @@
 | R4. Tipos duplicados entre `apps/api` e `apps/web` podem divergir | média | baixo | `lib/types.ts` com comentário apontando a origem. Pacote `packages/contracts` como follow-up |
 | R5. ~~DS "Atrito" anti-gamificação~~ **Resolvido**: DS refeito como cantor.ia Design System (sdd-005, 2026-09-25), feito para o jogo | — | — | Usar as classes `ct-*` do DS |
 | R6. Outra pessoa, em outro dispositivo, precisa do áudio para cantar | baixa (com YouTube) | médio | Resolvido pelo `GET /audio`. Só músicas com referência por upload ainda pedem o arquivo |
-| R7. O vídeo escolhido não bate com a letra do LRCLIB (clipe com introdução, versão ao vivo) | média | médio | Busca já sugere "official audio" + dica na tela. A API recusa duração ±10 s fora. Offset de ±2 s cobre o resto |
+| R7. O vídeo escolhido não bate com a letra do LRCLIB (clipe com introdução, versão ao vivo) | média | médio | Busca já sugere "official audio" + dica na tela. A API recusa duração ±10 s fora. Offset de ±10 s cobre o resto |
 | R8. Download do YouTube lento ou quebrado na hora de cantar | média | baixo | Progresso visível, cache no IndexedDB e seletor de arquivo como saída |
 
 ## 9. Perguntas em Aberto (bloqueantes)

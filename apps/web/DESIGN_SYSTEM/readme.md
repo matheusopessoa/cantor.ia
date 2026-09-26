@@ -55,7 +55,12 @@ DESIGN_SYSTEM/
 - Todas as classes do DS têm o prefixo `ct-` para não colidir com o Tailwind.
 - Estados por classe `is-*` (`is-current`, `is-you`, `is-dragover`). Valores contínuos por
   custom property (`--progress`, `--value`) setados via JS.
-- O `next/font` do layout atual (Geist) deve ser removido: as fontes vêm de `tokens/fonts.css`.
+- Sem `next/font`: as webfonts entram por `<link>` no `app/layout.tsx`, com a mesma URL do
+  Google Fonts de `tokens/fonts.css`. O `styles.css` **não** importa `fonts.css`: o Tailwind 4
+  inclui o DS depois das próprias regras, e ali um `@import` remoto é inválido (o build quebra).
+  A vitrine carrega `tokens/fonts.css` com um `<link>` próprio.
+- Os `@import` do `styles.css` usam a forma `@import './x.css'` (sem `url()`): é a que o
+  bundler do Tailwind 4 resolve.
 
 ---
 
@@ -159,9 +164,9 @@ Keyframes disponíveis: `ct-flicker`, `ct-blink`, `ct-pop`, `ct-beat`, `ct-chase
 | Preparar música, sem referência | `.ct-tabs` "Link do YouTube \| Enviar arquivo" → `.ct-input-group` (link + "Usar vídeo") ou `.ct-dropzone`; link "Procurar no YouTube" na dica |
 | Preparar música, processando | `.ct-tv` com a miniatura do vídeo + `.ct-loading` (tempo decorrido; nunca porcentagem falsa) + `.ct-name-entry` para adiantar o nome |
 | Preparar música, falhou | `.ct-alert--danger` ou `--warning` com a mensagem do código de erro (tabela abaixo) e as abas de volta |
-| Preparar música, pronta | `.ct-name-entry`, ranking (`.ct-marquee` + `.ct-ranking`), `.ct-btn--start` |
+| Preparar música, pronta | `.ct-alert--success` "Letra alinhada ao áudio (+3,2 s)" ou `.ct-alert--warning` "Não conseguimos alinhar a letra" (resultado de `lyricsAlignment`), `.ct-name-entry`, ranking (`.ct-marquee` + `.ct-ranking`), `.ct-btn--start` |
 | Baixando o áudio para cantar | `.ct-progress` com `--value` real (`Content-Length`). Sem tamanho conhecido, use `.ct-loading` |
-| Karaokê | `.ct-stage.ct-crt` → `.ct-hud` + `.ct-progress`, `.ct-highway` (canvas), `.ct-lyrics`, `.ct-countdown`, `.ct-range` do offset |
+| Karaokê | `.ct-stage.ct-crt` → `.ct-hud` + `.ct-progress`, `.ct-highway` (canvas), `.ct-lyrics`, `.ct-countdown`, `.ct-range` do ajuste fino da letra (a letra já vem alinhada pela API) |
 | Resultado | `.ct-score`, `.ct-grade`, `.ct-meter--pitch/--timing`, `.ct-badge--new-record`, ranking com `tr.is-you` |
 
 A miniatura vem de `https://i.ytimg.com/vi/<videoId>/hqdefault.jpg` (`default.jpg` na linha da

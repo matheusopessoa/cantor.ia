@@ -4,6 +4,10 @@ import { ReferenceNotReadyError, SongNotFoundError } from "../utils/errors.js";
 import type { LyricLine, PerformanceBody, PitchTrack } from "../utils/validators.js";
 import { scoringService, type ScoreResult } from "./scoring.service.js";
 
+/**
+ * `lines[].startMs` é o `startMs` da linha **avaliada** pela nota: a linha alinhada
+ * (`alignedLyrics`) quando existe, senão a original (sdd-007, risco R6).
+ */
 export interface PerformanceResult extends ScoreResult {
   id: string;
   playerName: string;
@@ -28,12 +32,11 @@ export const performanceService = {
       throw new ReferenceNotReadyError();
     }
 
-    const result = scoringService.score(
-      song.referenceTrack as PitchTrack,
-      track,
-      song.lyrics as LyricLine[],
-      { offsetMs },
-    );
+    // A nota avalia a letra alinhada ao áudio (sdd-007); o `offsetMs` do jogador é ajuste fino
+    // sobre ela. Sem alinhamento, cai na letra original.
+    const lines = (song.alignedLyrics as LyricLine[] | null) ?? (song.lyrics as LyricLine[]);
+
+    const result = scoringService.score(song.referenceTrack as PitchTrack, track, lines, { offsetMs });
 
     const performance = await performanceRepository.create({
       songId,

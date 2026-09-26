@@ -30,6 +30,18 @@ export const lyricLineSchema = z.object({
 });
 export type LyricLine = z.infer<typeof lyricLineSchema>;
 
+/**
+ * Diagnóstico do alinhamento automático da letra à referência (sdd-007). Convenção de sinal:
+ * `alinhado = original + shiftMs`. `aligned: false` → `alignedLyrics` fica nulo e os
+ * consumidores usam `lyrics`.
+ */
+export const lyricsAlignmentSchema = z.object({
+    aligned: z.boolean(),
+    shiftMs: z.number().int(),
+    matchedRatio: z.number().min(0).max(1),
+});
+export type LyricsAlignment = z.infer<typeof lyricsAlignmentSchema>;
+
 // ─── Músicas, referência e performances (sdd-003) ───────────────────────────
 
 export const songSearchQuerySchema = z.object({ q: z.string().trim().min(2).max(100) });
@@ -46,9 +58,16 @@ export const playerNameSchema = z
     .max(20)
     .regex(/^[\p{L}\p{N} ._-]+$/u);
 
+/**
+ * Limite do ajuste manual da letra. A referência aceita áudio até 10 s diferente da letra
+ * (`DURATION_TOLERANCE_MS`), então o desvio de intro pode chegar a isso. O ajuste só desloca
+ * a letra: nunca muda a velocidade dela.
+ */
+export const LYRICS_OFFSET_LIMIT_MS = 10_000;
+
 export const performanceBodySchema = z.object({
     playerName: playerNameSchema,
-    offsetMs: z.number().int().min(-2000).max(2000).default(0),
+    offsetMs: z.number().int().min(-LYRICS_OFFSET_LIMIT_MS).max(LYRICS_OFFSET_LIMIT_MS).default(0),
     track: pitchTrackSchema,
 });
 export type PerformanceBody = z.infer<typeof performanceBodySchema>;

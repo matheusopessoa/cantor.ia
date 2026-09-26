@@ -3,16 +3,19 @@
    Ponto de entrada único. Só importa; nunca escreva regras aqui.
    ════════════════════════════════════════════════════════════════ */
 
-@import url('./tokens/fonts.css');
-@import url('./tokens/colors.css');
-@import url('./tokens/typography.css');
-@import url('./tokens/spacing.css');
-@import url('./tokens/effects.css');
-@import url('./tokens/motion.css');
-@import url('./tokens/base.css');
+/* As webfonts (tokens/fonts.css) NÃO entram aqui: é um @import remoto (Google Fonts), e o
+   Tailwind 4 inclui este arquivo depois das próprias regras, onde um @import remoto é
+   inválido. O app carrega as fontes com <link> em apps/web/app/layout.tsx; a vitrine, com
+   <link href="tokens/fonts.css">. As duas usam a mesma URL de tokens/fonts.css. */
+@import './tokens/colors.css';
+@import './tokens/typography.css';
+@import './tokens/spacing.css';
+@import './tokens/effects.css';
+@import './tokens/motion.css';
+@import './tokens/base.css';
 
-@import url('./components/button.css');
-@import url('./components/form.css');
-@import url('./components/surface.css');
-@import url('./components/game.css');
-@import url('./components/brand.css');
+@import './components/button.css';
+@import './components/form.css';
+@import './components/surface.css';
+@import './components/game.css';
+@import './components/brand.css';

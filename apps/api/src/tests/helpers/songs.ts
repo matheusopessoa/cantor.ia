@@ -25,7 +25,14 @@ export function seedSong(overrides: Partial<Prisma.SongUncheckedCreateInput> = {
   });
 }
 
-/** Música com referência pronta (vinda do YouTube). */
+/** Diagnóstico de uma letra que já estava em cima da referência (sdd-007). */
+export const PERFECT_ALIGNMENT = { aligned: true, shiftMs: 0, matchedRatio: 1 };
+
+/**
+ * Música com referência pronta (vinda do YouTube) e letra alinhada a ela, como o `markReady`
+ * grava desde a sdd-007. Para simular uma música anterior à sdd-007, passe
+ * `alignedLyrics: Prisma.DbNull, lyricsAlignment: Prisma.DbNull`.
+ */
 export function seedReadySong(overrides: Partial<Prisma.SongUncheckedCreateInput> = {}): Promise<Song> {
   return seedSong({
     referenceStatus: "READY",
@@ -33,6 +40,8 @@ export function seedReadySong(overrides: Partial<Prisma.SongUncheckedCreateInput
     referenceAudioMs: SONG_MS,
     youtubeVideoId: VIDEO_ID,
     referenceUpdatedAt: new Date(),
+    alignedLyrics: melody.lines,
+    lyricsAlignment: PERFECT_ALIGNMENT,
     ...overrides,
   });
 }
@@ -60,6 +69,8 @@ const statusSelect = {
   referenceAudioMs: true,
   referenceTrack: true,
   youtubeVideoId: true,
+  alignedLyrics: true,
+  lyricsAlignment: true,
 } as const;
 
 /** Espera o processamento em background chegar ao `status` e devolve o estado gravado. */

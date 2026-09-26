@@ -69,6 +69,12 @@ model Song {
   referenceError     ReferenceErrorCode?
   /// Duração do áudio da última tentativa (preenche a mensagem de DURATION_MISMATCH).
   referenceAudioMs   Int?
+  /// LyricLine[] alinhada ao áudio da referência atual (sdd-007). Nulo até READY ou quando
+  /// o alinhamento não bateu (matchedRatio < 0.5): consumidores usam `lyrics`.
+  alignedLyrics      Json?
+  /// { aligned, shiftMs, matchedRatio } — diagnóstico do alinhamento (sdd-007). Nulo enquanto
+  /// a referência não está READY (claim e FAILED zeram) ou em músicas anteriores à sdd-007.
+  lyricsAlignment    Json?
   /// Última transição de status. PROCESSING há mais de 15 min é tratado como abandonado.
   referenceUpdatedAt DateTime?
   createdAt          DateTime            @default(now())

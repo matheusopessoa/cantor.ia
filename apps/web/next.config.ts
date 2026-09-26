@@ -26,6 +26,10 @@ const nextConfig: NextConfig = {
   // e apps/web/node_modules é só uma árvore de symlinks. Sem ampliar o tracing
   // para a raiz, o standalone sai sem elas.
   outputFileTracingRoot: path.join(__dirname, "../../"),
+  images: {
+    // Miniaturas do YouTube (lib/youtube.ts): default.jpg na busca, hqdefault.jpg na TV.
+    remotePatterns: [{ protocol: "https", hostname: "i.ytimg.com", pathname: "/vi/**" }],
+  },
 };
 
 export default nextConfig;

@@ -1,8 +1,8 @@
 import { lrclibClient, type LrclibTrack } from "../clients/lrclib.client.js";
 import { WorkerClientError, workerClient, type WorkerAudio } from "../clients/worker.client.js";
 import { env } from "../config/env.js";
-import type { ReferenceErrorCode, ReferenceStatus } from "../generated/prisma/client.js";
-import { songRepository, type SongSummary } from "../repositories/song.repository.js";
+import { Prisma, type ReferenceErrorCode, type ReferenceStatus } from "../generated/prisma/client.js";
+import { songRepository, type AlignmentData, type SongSummary } from "../repositories/song.repository.js";
 import {
   AudioProviderUnavailableError,
   ReferenceAlreadyProcessingError,
@@ -13,7 +13,8 @@ import {
   SongWithoutSyncedLyricsError,
 } from "../utils/errors.js";
 import { parseLrc } from "../utils/lrc.js";
-import type { LyricLine, PitchTrack } from "../utils/validators.js";
+import type { LyricLine, LyricsAlignment, PitchTrack } from "../utils/validators.js";
+import { alignmentService, type AlignmentResult } from "./alignment.service.js";
 
 /** Máximo de resultados da busca. */
 export const SEARCH_LIMIT = 20;
@@ -42,11 +43,19 @@ export interface SongDto {
   title: string;
   album: string | null;
   durationMs: number;
+  /** Letra do LRCLIB, como veio. */
   lyrics: LyricLine[];
   referenceStatus: ReferenceStatus;
   referenceError: ReferenceErrorCode | null;
   referenceAudioMs: number | null;
   youtubeVideoId: string | null;
+  /**
+   * Letra alinhada ao áudio da referência (sdd-007). Nulo enquanto não `READY` ou quando o
+   * alinhamento não bateu: consumidores usam `alignedLyrics ?? lyrics`.
+   */
+  alignedLyrics: LyricLine[] | null;
+  /** Diagnóstico do alinhamento; nulo enquanto não `READY`. */
+  lyricsAlignment: LyricsAlignment | null;
 }
 
 export interface CreateSongResult {
@@ -80,6 +89,21 @@ function toDto(song: SongSummary): SongDto {
     referenceError: song.referenceError,
     referenceAudioMs: song.referenceAudioMs,
     youtubeVideoId: song.youtubeVideoId,
+    alignedLyrics: song.alignedLyrics as LyricLine[] | null,
+    lyricsAlignment: song.lyricsAlignment as LyricsAlignment | null,
+  };
+}
+
+/** Só o diagnóstico do alinhamento (sem as linhas), como sai no `SongDto`. */
+function toDiagnostic({ aligned, shiftMs, matchedRatio }: AlignmentResult): LyricsAlignment {
+  return { aligned, shiftMs, matchedRatio };
+}
+
+/** O que vai para o banco a partir do resultado do alinhamento. */
+function toAlignmentData(alignment: AlignmentResult): AlignmentData {
+  return {
+    alignedLyrics: alignment.lines ?? Prisma.DbNull,
+    lyricsAlignment: toDiagnostic(alignment),
   };
 }
 
@@ -153,7 +177,14 @@ async function runReference(song: SongSummary, extract: () => Promise<PitchTrack
       return;
     }
 
-    await songRepository.markReady(song.id, { referenceTrack: track, referenceAudioMs: track.durationMs });
+    // A letra é alinhada ao mesmo áudio de onde saiu a curva (sdd-007): sem query extra.
+    const alignment = alignmentService.align(song.lyrics as LyricLine[], track);
+
+    await songRepository.markReady(song.id, {
+      referenceTrack: track,
+      referenceAudioMs: track.durationMs,
+      ...toAlignmentData(alignment),
+    });
   } catch (error) {
     // O `message` do worker é só para log (sdd-001 §4): o usuário vê o código.
     if (env.NODE_ENV !== "test") {
@@ -207,9 +238,23 @@ export const songService = {
     return { song: toDto(song), created: true };
   },
 
+  /**
+   * Música `READY` anterior à sdd-007 (sem `lyricsAlignment`) é alinhada e gravada na primeira
+   * leitura (regra 9): 1 leitura com `referenceTrack` + 1 escrita, uma vez por música.
+   */
   async getById(id: string): Promise<SongDto> {
     const song = await songRepository.findById(id);
     if (!song) throw new SongNotFoundError(id);
+
+    if (song.referenceStatus === "READY" && song.lyricsAlignment === null) {
+      const full = await songRepository.findWithReference(id);
+      if (full?.referenceStatus === "READY" && full.referenceTrack !== null) {
+        const alignment = alignmentService.align(full.lyrics as LyricLine[], full.referenceTrack as PitchTrack);
+        await songRepository.saveAlignment(id, toAlignmentData(alignment));
+        return toDto({ ...song, alignedLyrics: alignment.lines, lyricsAlignment: toDiagnostic(alignment) });
+      }
+    }
+
     return toDto(song);
   },
 

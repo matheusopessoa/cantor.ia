@@ -46,6 +46,8 @@ describe("POST /api/songs", () => {
       referenceError: null,
       referenceAudioMs: null,
       youtubeVideoId: null,
+      alignedLyrics: null,
+      lyricsAlignment: null,
     });
     expect(response.json()).not.toHaveProperty("referenceTrack");
   });

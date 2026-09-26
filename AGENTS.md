@@ -29,6 +29,7 @@ Monorepo pnpm (Node.js/TypeScript) com dois workspaces e um app Python fora do p
 | `pnpm --filter api test` | Sobe o Postgres de teste isolado (`docker-compose.test.yml`, porta 5433), aplica as migrations (`prisma migrate deploy` no `global-setup.ts`) e roda `vitest run`. | Antes de commit/PR que toca `apps/api`. |
 | `pnpm --filter api test:watch` | Mesma suíte, em watch mode. | Durante o desenvolvimento de testes. |
 | `pnpm --filter web lint` | Roda ESLint (flat config) no web. | Antes de commit/PR que toca `apps/web`. |
+| `pnpm --filter web test` | Roda `vitest run` nas funções puras de `apps/web/lib/` (`apps/web/tests/*.spec.ts`, sem DOM nem browser). `test:watch` para watch mode. | Antes de commit/PR que toca `apps/web/lib`. |
 | `pnpm --filter api db:migrate` | Cria/aplica migration Prisma em dev (`prisma migrate dev`). | Mudança em `prisma/schema.prisma`. |
 | `pnpm --filter api db:generate` | Regenera o Prisma Client (saída em `apps/api/src/generated/prisma`). | Após alterar o schema. |
 | `pnpm --filter api db:studio` | Abre o Prisma Studio. | Inspeção manual dos dados. |
@@ -50,7 +51,14 @@ Monorepo pnpm (Node.js/TypeScript) com dois workspaces e um app Python fora do p
   construtor/factories/interfaces: os módulos são importados diretamente. Documentado em
   [`apps/api/docs/arquitetura.md`](apps/api/docs/arquitetura.md).
 - **`apps/web`**: Next.js App Router (`app/`), estilizado com Tailwind 4 e os tokens/componentes
-  de `apps/web/DESIGN_SYSTEM/`.
+  de `apps/web/DESIGN_SYSTEM/`. Páginas são Server Components que buscam `SongDto`/ranking via
+  `lib/api.server.ts` e entregam a Client Components em `components/` (busca, preparação com
+  polling, sessão de karaokê). Letra, canvas e nota usam `effectiveLyrics(song)`
+  (`lib/lyrics.ts`: a letra alinhada pela API, senão a original; sdd-007). O browser fala
+  com a API por `lib/api.ts`; o áudio da música
+  fica em cache no IndexedDB (`lib/audio-store.ts`); o microfone passa por um `AudioWorklet`
+  (`public/worklets/capture.worklet.js`) e o pitch é detectado com `pitchy` (`lib/recorder.ts`).
+  Plano de referência: `specs/sdd-004-web-karaoke/tasks.md`.
 - **`apps/worker`**: FastAPI stateless, sem banco. Pipeline ffmpeg → Demucs (`htdemucs`, voz) →
   torchcrepe (`tiny`, 10 ms) → `PitchTrack`. O áudio só existe no tmp da requisição. Só a API
   fala com ele. Contrato em `specs/sdd-001-worker-pitch/tasks.md` e em `apps/worker/README.md`.
@@ -95,12 +103,12 @@ cantor.ia/
 │   │   │   ├── config/          # cors.ts, env.ts
 │   │   │   ├── clients/         # lrclib.client.ts, worker.client.ts (HTTP externo)
 │   │   │   ├── controllers/     # auth, health, song, performance
-│   │   │   ├── services/        # auth, health, scoring (nota), song, performance
+│   │   │   ├── services/        # auth, health, scoring (nota), alignment (letra ↔ áudio), song, performance
 │   │   │   ├── repositories/    # user, song, performance
 │   │   │   ├── routes/          # auth.routes.ts, health.routes.ts, song.routes.ts
 │   │   │   ├── utils/           # prisma, hash, bindex, validators, errors, error-handler, pitch, lrc, youtube
 │   │   │   ├── generated/       # Prisma Client gerado (ignorado pelo Git)
-│   │   │   ├── tests/           # auth/, config/, errors/, healthcheck/, lrc/, performances/, scoring/, songs/, youtube/, helpers/
+│   │   │   ├── tests/           # alignment/, auth/, config/, errors/, healthcheck/, lrc/, performances/, scoring/, songs/, youtube/, helpers/
 │   │   │   ├── app.ts
 │   │   │   └── server.ts
 │   │   ├── prisma/
@@ -113,10 +121,13 @@ cantor.ia/
 │   │   ├── .env.test            # env da suíte de testes (sem segredos reais)
 │   │   └── Dockerfile
 │   ├── web/
-│       ├── app/                 # layout.tsx, page.tsx, globals.css
-│       ├── lib/                 # env.public.ts (browser), env.server.ts (server-only)
+│       ├── app/                 # layout.tsx, page.tsx (busca), songs/[id]/page.tsx (preparar), songs/[id]/sing/page.tsx (karaokê), error.tsx, not-found.tsx, globals.css
+│       ├── components/          # Client Components: song-search, song-prep, karaoke-session, pitch-canvas, lyrics-view, score-result, ranking-list…
+│       ├── lib/                 # api.ts (cliente tipado), api.server.ts, types.ts (espelho dos DTOs), pitch.ts, lyrics.ts, recorder.ts, audio-store.ts (IndexedDB), env.public.ts, env.server.ts
+│       ├── tests/               # *.spec.ts do Vitest (só funções puras de lib/)
+│       ├── public/worklets/     # capture.worklet.js (AudioWorklet do microfone)
 │       ├── DESIGN_SYSTEM/       # cantor.ia Design System: readme.md, styles.css, tokens/, components/, DESIGN_SYSTEM.html
-│       ├── public/
+│       ├── vitest.config.mts
 │       ├── AGENTS.md            # avisos sobre a versão do Next.js
 │       └── Dockerfile
 │   └── worker/                  # Python 3.12 + uv (fora do pnpm)
@@ -174,8 +185,12 @@ cantor.ia/
   arquivos e faz `TRUNCATE` antes de cada teste — `helpers/database.ts` recusa bancos cujo nome
   não termine em `_test`.
 - **Web**: App Router do Next.js; ESLint flat config (`eslint.config.mjs`); estilos via
-  Tailwind 4 + tokens do `DESIGN_SYSTEM/`. Leia `apps/web/AGENTS.md` antes de gerar código
-  Next.js.
+  Tailwind 4 + tokens do `DESIGN_SYSTEM/` (classes `ct-*`; nunca hex ou fonte crua em
+  componente). Leia `apps/web/AGENTS.md` antes de gerar código Next.js. As regras do React
+  Compiler no ESLint do Next 16 proíbem `setState` síncrono dentro de `useEffect` e ler refs
+  durante o render: preferências do dispositivo entram por `useSyncExternalStore`
+  (`lib/use-prefs.ts`). Testes: Vitest em `apps/web/tests/*.spec.ts`, só para funções puras de
+  `lib/`.
 
 ---
 
@@ -288,7 +303,9 @@ essa pasta, para o Claude Code registrar as skills como comandos (`/code-planner
 | `next` | 16.2.10 | Framework do frontend | `apps/web/app/` |
 | `react` / `react-dom` | 19.2.4 | UI do frontend | `apps/web/app/` |
 | `tailwindcss` | ^4 | Estilos do frontend | `apps/web/app/globals.css`, `postcss.config.mjs` |
-| `server-only` | ^0.0.1 | Impede importar código de servidor em Client Components | `apps/web/lib/env.server.ts` |
+| `server-only` | ^0.0.1 | Impede importar código de servidor em Client Components | `apps/web/lib/env.server.ts`, `lib/api.server.ts` |
+| `pitchy` | ^4.1.0 | Detecção de pitch da voz no browser (McLeod Pitch Method), hop de 10 ms | `apps/web/lib/recorder.ts` |
+| `vitest` (web) | ^5.0.2 | Testes das funções puras de `apps/web/lib/` | `apps/web/tests/`, `vitest.config.mts` |
 | `postgres` (Docker) | 15-alpine | Banco de dados (dev e test) | `docker-compose.dev.yml`, `docker-compose.test.yml` |
 | `fastapi` / `uvicorn` | 0.141 / 0.54 | Servidor HTTP do worker | `apps/worker/app/main.py` |
 | `demucs` | 4.1 | Isola a voz (modelo `htdemucs`) | `apps/worker/app/separation.py` |
@@ -346,7 +363,7 @@ de teste. Plano de referência: `specs/sdd-006-env-config/tasks.md`.
 
 - **Repositório**: cantor.ia — `github.com/matheusopessoa/cantor.ia`.
 - **Gerenciador de pacotes**: pnpm 10.24.0, workspaces em `apps/*`.
-- **Apps**: `api` (v1.1.0), `web` (v0.1.0), `worker` (v0.1.0) — ainda sem releases/tags publicadas.
+- **Apps**: `api` (v1.2.0), `web` (v0.3.0), `worker` (v0.1.0) — ainda sem releases/tags publicadas.
 - **Squad/owners/maintainers**: _(preencher — não há esse dado no repositório hoje)_.
 - **Infra**: Docker Compose para dev (`docker-compose.dev.yml`), testes
   (`docker-compose.test.yml`) e produção (`docker-compose.prod.yml`); `nginx.conf` presente na

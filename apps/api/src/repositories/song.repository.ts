@@ -20,6 +20,8 @@ const songSummarySelect = {
   referenceError: true,
   referenceAudioMs: true,
   youtubeVideoId: true,
+  alignedLyrics: true,
+  lyricsAlignment: true,
   referenceUpdatedAt: true,
   createdAt: true,
 } satisfies Prisma.SongSelect;
@@ -46,7 +48,15 @@ export interface CreateSongData {
   lyrics: Prisma.InputJsonValue;
 }
 
-export interface MarkReadyData {
+/** Alinhamento da letra à referência atual (sdd-007). */
+export interface AlignmentData {
+  /** `LyricLine[]`, ou `Prisma.DbNull` quando o alinhamento não bateu. */
+  alignedLyrics: Prisma.InputJsonValue | typeof Prisma.DbNull;
+  /** `LyricsAlignment` */
+  lyricsAlignment: Prisma.InputJsonValue;
+}
+
+export interface MarkReadyData extends AlignmentData {
   /** `PitchTrack` */
   referenceTrack: Prisma.InputJsonValue;
   referenceAudioMs: number;
@@ -108,23 +118,37 @@ export const songRepository = {
         youtubeVideoId,
         referenceError: null,
         referenceAudioMs: null,
+        // O alinhamento vale só para a referência atual (sdd-007, regra 2).
+        alignedLyrics: Prisma.DbNull,
+        lyricsAlignment: Prisma.DbNull,
       },
     });
 
     return count === 1;
   },
 
-  async markReady(id: string, { referenceTrack, referenceAudioMs }: MarkReadyData): Promise<void> {
+  /** `READY` grava a curva e, junto, a letra alinhada a ela (sdd-007). */
+  async markReady(
+    id: string,
+    { referenceTrack, referenceAudioMs, alignedLyrics, lyricsAlignment }: MarkReadyData,
+  ): Promise<void> {
     await prisma.song.update({
       where: { id },
       data: {
         referenceStatus: "READY",
         referenceTrack,
         referenceAudioMs,
+        alignedLyrics,
+        lyricsAlignment,
         referenceError: null,
         referenceUpdatedAt: new Date(),
       },
     });
+  },
+
+  /** Backfill do alinhamento em música `READY` anterior à sdd-007 (regra 9). */
+  async saveAlignment(id: string, { alignedLyrics, lyricsAlignment }: AlignmentData): Promise<void> {
+    await prisma.song.update({ where: { id }, data: { alignedLyrics, lyricsAlignment } });
   },
 
   /** Falha zera o `youtubeVideoId`: só música `READY` serve áudio (regra 12). */
@@ -136,6 +160,8 @@ export const songRepository = {
         referenceError,
         referenceAudioMs,
         referenceTrack: Prisma.DbNull,
+        alignedLyrics: Prisma.DbNull,
+        lyricsAlignment: Prisma.DbNull,
         youtubeVideoId: null,
         referenceUpdatedAt: new Date(),
       },
