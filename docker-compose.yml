@@ -16,7 +16,8 @@ services:
       - "3000:3000"
 
   # Extração de pitch (Python). Sem variáveis de ambiente no MVP. A porta fica exposta só
-  # para desenvolvimento; a API fala com ele por http://worker:8000 (entra na sdd-003).
+  # para desenvolvimento; a API fala com ele por http://worker:8000 (WORKER_URL, definido
+  # nos compose de dev e prod).
   worker:
     build:
       context: apps/worker

@@ -26,3 +26,75 @@ model Session {
   expiresAt    DateTime
   createdAt    DateTime @default(now())
 }
+
+/// Estado da referência de pitch de uma música (sdd-003).
+enum ReferenceStatus {
+  NONE
+  PROCESSING
+  READY
+  FAILED
+}
+
+/// Motivo de falha da referência. O web traduz cada código em mensagem
+/// (tabela "Erros da referência" no readme do design system). Nunca texto livre.
+enum ReferenceErrorCode {
+  VIDEO_UNAVAILABLE
+  TOO_LONG
+  DURATION_MISMATCH
+  NO_VOICE
+  DOWNLOAD_FAILED
+  INVALID_AUDIO
+  INTERNAL
+}
+
+/// Música cadastrada a partir do LRCLIB. A referência de pitch é extraída uma única vez
+/// do áudio (link do YouTube ou arquivo enviado); o áudio nunca é armazenado.
+model Song {
+  id                 String              @id @default(uuid(7))
+  /// Id da faixa no LRCLIB. O cadastro é idempotente por este campo.
+  lrclibId           Int                 @unique
+  artist             String
+  title              String
+  album              String?
+  /// Duração informada pelo LRCLIB, em ms. Referência com mais de 10 s de diferença falha.
+  durationMs         Int
+  /// LyricLine[] — letra sincronizada já parseada do LRC.
+  lyrics             Json
+  referenceStatus    ReferenceStatus     @default(NONE)
+  /// PitchTrack (sdd-001). Pode passar de 400 KB: nunca selecionar em listas ou no SongDto.
+  referenceTrack     Json?
+  /// Vídeo da tentativa atual ou da referência pronta; permite mostrar a miniatura e baixar o
+  /// áudio para tocar. Nulo se veio de upload ou se a tentativa pelo YouTube falhou.
+  youtubeVideoId     String?
+  referenceError     ReferenceErrorCode?
+  /// Duração do áudio da última tentativa (preenche a mensagem de DURATION_MISMATCH).
+  referenceAudioMs   Int?
+  /// Última transição de status. PROCESSING há mais de 15 min é tratado como abandonado.
+  referenceUpdatedAt DateTime?
+  createdAt          DateTime            @default(now())
+  performances       Performance[]
+}
+
+/// Uma cantoria. Sem login: o jogador informa só o nome (estilo fliperama). Nomes não são
+/// únicos.
+model Performance {
+  id          String   @id @default(uuid(7))
+  songId      String
+  song        Song     @relation(fields: [songId], references: [id], onDelete: Cascade)
+  playerName  String
+  /// Nota final 0..10 (scoringService).
+  score       Float
+  pitchScore  Float
+  timingScore Float
+  /// Ajuste manual da letra enviado pelo jogador, em ms.
+  offsetMs    Int      @default(0)
+  /// { keyOffsetSemitones, coverage, lines } — detalhes do ScoreResult.
+  details     Json
+  /// PitchTrack cantado (só pitch, não é áudio): usado para recalibrar a nota. Nunca sai
+  /// em nenhuma rota.
+  sungTrack   Json
+  createdAt   DateTime @default(now())
+
+  /// Ranking: score desc; o rank é um count sobre este índice.
+  @@index([songId, score(sort: Desc)])
+}

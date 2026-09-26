@@ -32,6 +32,10 @@ export const envSchema = z
     JWT_SIGN_SECRET: secretSchema,
     EMAIL_BINDEX_SECRET: secretSchema,
     CORS_ALLOWED_ORIGINS: originListSchema.default([]),
+    // Endereço do worker de pitch (apps/worker). Entre containers vira http://worker:8000.
+    WORKER_URL: z.url().default("http://localhost:8000"),
+    // Provedor de letras sincronizadas (LRCLIB). Só muda para apontar a um espelho.
+    LRCLIB_BASE_URL: z.url().default("https://lrclib.net"),
   })
   .refine((env) => env.NODE_ENV !== "prod" || env.CORS_ALLOWED_ORIGINS.length > 0, {
     path: ["CORS_ALLOWED_ORIGINS"],

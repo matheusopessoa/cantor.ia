@@ -44,8 +44,9 @@ Monorepo pnpm (Node.js/TypeScript) com dois workspaces e um app Python fora do p
 ## 2. Arquitetura e Padrões
 
 - **`apps/api`**: arquitetura em camadas simples e unidirecional —
-  `routes → controllers → services → repositories → banco de dados`, com `utils/` como peças
-  compartilhadas sem estado de negócio. **Não há injeção de dependência** via
+  `routes → controllers → services → repositories → banco de dados`, com `clients/` (HTTP
+  externo: LRCLIB e worker, chamados pelos services) e `utils/` como peças compartilhadas
+  sem estado de negócio. **Não há injeção de dependência** via
   construtor/factories/interfaces: os módulos são importados diretamente. Documentado em
   [`apps/api/docs/arquitetura.md`](apps/api/docs/arquitetura.md).
 - **`apps/web`**: Next.js App Router (`app/`), estilizado com Tailwind 4 e os tokens/componentes
@@ -60,6 +61,7 @@ Monorepo pnpm (Node.js/TypeScript) com dois workspaces e um app Python fora do p
 | Controllers | `apps/api/src/controllers/` | Fronteira HTTP: validar com Zod (`schema.parse`), chamar o service, devolver resposta. Único lugar que conhece `FastifyRequest`/`FastifyReply`. |
 | Services | `apps/api/src/services/` | Regra de negócio. Não conhece HTTP nem SQL. Retorna DTOs simples (ex.: `PublicUser`). |
 | Repositories | `apps/api/src/repositories/` | Acesso a dados via Prisma Client. Retorna models do Prisma. |
+| Clients | `apps/api/src/clients/` | Integrações HTTP externas (LRCLIB, worker). Chamados pelos services; validam a resposta com Zod e lançam `AppError`/`WorkerClientError`. |
 | Utils | `apps/api/src/utils/` | Prisma singleton, hash, bindex, schemas Zod (`validators.ts`), erros, error handler global. |
 | Config | `apps/api/src/config/` | Variáveis de ambiente validadas com Zod (`env.ts`) e CORS (`cors.ts`). |
 | App Router | `apps/web/app/` | Páginas e layouts do Next.js. |
@@ -91,13 +93,14 @@ cantor.ia/
 │   ├── api/
 │   │   ├── src/
 │   │   │   ├── config/          # cors.ts, env.ts
-│   │   │   ├── controllers/     # auth.controller.ts, health.controller.ts
-│   │   │   ├── services/        # auth.service.ts, health.service.ts
-│   │   │   ├── repositories/    # user.repository.ts
-│   │   │   ├── routes/          # auth.routes.ts, health.routes.ts
-│   │   │   ├── utils/           # prisma.ts, hash.ts, bindex.ts, validators.ts, errors.ts, error-handler.ts
+│   │   │   ├── clients/         # lrclib.client.ts, worker.client.ts (HTTP externo)
+│   │   │   ├── controllers/     # auth, health, song, performance
+│   │   │   ├── services/        # auth, health, scoring (nota), song, performance
+│   │   │   ├── repositories/    # user, song, performance
+│   │   │   ├── routes/          # auth.routes.ts, health.routes.ts, song.routes.ts
+│   │   │   ├── utils/           # prisma, hash, bindex, validators, errors, error-handler, pitch, lrc, youtube
 │   │   │   ├── generated/       # Prisma Client gerado (ignorado pelo Git)
-│   │   │   ├── tests/           # auth/, config/, healthcheck/, helpers/, setup.ts, global-setup.ts
+│   │   │   ├── tests/           # auth/, config/, errors/, healthcheck/, lrc/, performances/, scoring/, songs/, youtube/, helpers/
 │   │   │   ├── app.ts
 │   │   │   └── server.ts
 │   │   ├── prisma/
@@ -280,6 +283,7 @@ essa pasta, para o Claude Code registrar as skills como comandos (`/code-planner
 | `bcryptjs` | ^3.0.3 | Hashing de senha | `apps/api/src/utils/hash.ts` |
 | `@fastify/jwt` | ^10.2.0 | Autenticação JWT | `apps/api/src/app.ts`, `services/auth.service.ts` |
 | `@fastify/cors` | ^11.3.0 | CORS | `apps/api/src/config/cors.ts` |
+| `@fastify/multipart` | ^10.1.2 | Upload da referência de pitch (1 arquivo, 20 MB) | `apps/api/src/app.ts`, `controllers/song.controller.ts` |
 | `vitest` | ^4.1.10 | Testes da API | `apps/api/src/tests/`, `vitest.config.ts` |
 | `next` | 16.2.10 | Framework do frontend | `apps/web/app/` |
 | `react` / `react-dom` | 19.2.4 | UI do frontend | `apps/web/app/` |
@@ -328,6 +332,8 @@ de teste. Plano de referência: `specs/sdd-006-env-config/tasks.md`.
 | `JWT_SIGN_SECRET` | api | sim | sim | `config/env.ts` |
 | `EMAIL_BINDEX_SECRET` | api | sim | sim (trocar invalida a busca de e-mails) | `config/env.ts` |
 | `CORS_ALLOWED_ORIGINS` | api | só em prod | não | `config/env.ts` |
+| `WORKER_URL` | api | não (padrão: `http://localhost:8000`; compose: `http://worker:8000`) | não | `config/env.ts` |
+| `LRCLIB_BASE_URL` | api | não (padrão: `https://lrclib.net`) | não | `config/env.ts` |
 | `NEXT_PUBLIC_API_URL` | web (browser, build-time) | sim | **nunca** | `lib/env.public.ts` |
 | `API_INTERNAL_URL` | web (servidor) | não (padrão: `NEXT_PUBLIC_API_URL`) | não | `lib/env.server.ts` |
 
@@ -340,7 +346,7 @@ de teste. Plano de referência: `specs/sdd-006-env-config/tasks.md`.
 
 - **Repositório**: cantor.ia — `github.com/matheusopessoa/cantor.ia`.
 - **Gerenciador de pacotes**: pnpm 10.24.0, workspaces em `apps/*`.
-- **Apps**: `api` (v1.0.0), `web` (v0.1.0), `worker` (v0.1.0) — ainda sem releases/tags publicadas.
+- **Apps**: `api` (v1.1.0), `web` (v0.1.0), `worker` (v0.1.0) — ainda sem releases/tags publicadas.
 - **Squad/owners/maintainers**: _(preencher — não há esse dado no repositório hoje)_.
 - **Infra**: Docker Compose para dev (`docker-compose.dev.yml`), testes
   (`docker-compose.test.yml`) e produção (`docker-compose.prod.yml`); `nginx.conf` presente na

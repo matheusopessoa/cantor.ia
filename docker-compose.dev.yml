@@ -24,6 +24,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
       JWT_SIGN_SECRET: ${JWT_SIGN_SECRET:?rode corepack pnpm env:init}
       EMAIL_BINDEX_SECRET: ${EMAIL_BINDEX_SECRET:?rode corepack pnpm env:init}
+      WORKER_URL: http://worker:8000
     depends_on:
       db:
         condition: service_healthy

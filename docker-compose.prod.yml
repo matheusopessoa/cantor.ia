@@ -17,6 +17,7 @@ services:
       JWT_SIGN_SECRET: ${JWT_SIGN_SECRET:?defina JWT_SIGN_SECRET no .env do servidor}
       EMAIL_BINDEX_SECRET: ${EMAIL_BINDEX_SECRET:?defina EMAIL_BINDEX_SECRET no .env do servidor}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?defina CORS_ALLOWED_ORIGINS no .env do servidor}
+      WORKER_URL: http://worker:8000
     restart: always
 
   web:

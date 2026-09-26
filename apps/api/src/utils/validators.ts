@@ -29,3 +29,32 @@ export const lyricLineSchema = z.object({
     text: z.string(),
 });
 export type LyricLine = z.infer<typeof lyricLineSchema>;
+
+// ─── Músicas, referência e performances (sdd-003) ───────────────────────────
+
+export const songSearchQuerySchema = z.object({ q: z.string().trim().min(2).max(100) });
+
+export const createSongBodySchema = z.object({ lrclibId: z.number().int().positive() });
+
+export const songParamsSchema = z.object({ id: z.uuid() });
+
+/** Nome de fliperama: letras, números, espaço, ponto, sublinhado e hífen. Sem HTML. */
+export const playerNameSchema = z
+    .string()
+    .trim()
+    .min(1)
+    .max(20)
+    .regex(/^[\p{L}\p{N} ._-]+$/u);
+
+export const performanceBodySchema = z.object({
+    playerName: playerNameSchema,
+    offsetMs: z.number().int().min(-2000).max(2000).default(0),
+    track: pitchTrackSchema,
+});
+export type PerformanceBody = z.infer<typeof performanceBodySchema>;
+
+export const rankingQuerySchema = z.object({
+    limit: z.coerce.number().int().min(1).max(50).default(10),
+});
+
+export const youtubeReferenceBodySchema = z.object({ url: z.string().trim().min(1).max(300) });
