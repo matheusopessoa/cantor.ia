@@ -30,3 +30,8 @@ export class InvalidEnvironmentError extends AppError {
   }
 }
 
+export class InvalidReferenceError extends AppError {
+  constructor() {
+    super("Reference track has no voiced frames", 422);
+  }
+}

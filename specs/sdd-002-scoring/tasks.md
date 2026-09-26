@@ -51,7 +51,9 @@
   ```
   score(reference, sung, lines, { offsetMs })
     │
-    ├─ 1. alinhar: desloca `sung` por offsetMs (frames), corta/estende para o tamanho da referência
+    ├─ 1. alinhar: lê `sung` na mesma grade da referência (o que passa do tamanho dela é
+    │     ignorado; o que falta conta como silêncio). As curvas não são deslocadas: a voz é
+    │     gravada sobre a própria referência. `offsetMs` só ajusta a letra (passo 5)
     ├─ 2. keyOffset = mediana de fold12(sung[i] - ref[i]) nos frames com voz nos dois lados
     ├─ 3. para cada frame i com voz na referência:
     │       melhor erro em cents buscando sung[j], |j-i| ≤ 15 frames (±150 ms)
@@ -60,10 +62,15 @@
     ├─ 4. accuracy = média de frameScore nos frames cobertos
     │     coverage = cobertos / frames com voz na referência
     │     pitch = accuracy × min(1, coverage / 0.6)
-    ├─ 5. para cada linha do LRC com texto e voz na referência:
-    │       onset = primeiro trecho ≥ 50 ms contínuo de voz cantada em [t - 800, t + 800] ms
-    │       onsetScore = 1 se |Δ| ≤ 400 ms; linear até 0 em 800 ms; 0 se não houver onset
-    │       presença = fração de frames com voz cantada dentro da linha
+    ├─ 5. para cada linha do LRC com texto e voz na referência (t = startMs - offsetMs;
+    │     a linha vai até a próxima ou, na última, por 5 s):
+    │       onset = primeiro *início* de voz cantada em [t - 800, t + 800] ms: frame com voz
+    │               precedido de silêncio (ou frame 0) que abre ≥ 50 ms contínuos de voz.
+    │               Voz que já vinha soando antes da janela não conta: senão a cauda da linha
+    │               anterior zeraria a linha sempre que a pausa fosse < 800 ms
+    │       Δ = onset - t; onsetScore = 1 se |Δ| ≤ 400 ms; linear até 0 em 800 ms; 0 se não houver onset
+    │       presença = frames com voz cantada na linha / frames com voz na referência na linha
+    │                  (relativa à referência para não zerar linha curta seguida de trecho instrumental)
     │       lineScore = presença ≥ 0.25 ? onsetScore : 0
     │     timing = média de lineScore
     └─ 6. score = round1(10 × (0.7 × pitch + 0.3 × timing))
@@ -155,7 +162,7 @@
   | `sung` = referência − 12 semitons (oitava abaixo) | `score` ≥ 9.8 |
   | `sung` = referência + 3 semitons (outro tom) | `score` ≥ 9.8, `keyOffsetSemitones` ≈ 3 |
   | `sung` = referência + ruído gaussiano de σ = 30 cents | `pitchScore` ≥ 9 |
-  | `sung` = referência + 0.75 semitom constante em metade dos frames | `pitchScore` entre 4 e 7 |
+  | `sung` = referência + 0.75 semitom constante na segunda metade | `pitchScore` entre 7 e 8 (75 cents fica no meio da rampa 50→100: cada frame desafinado vale 0.5) |
   | `sung` = referência atrasada 100 ms | `score` ≥ 9.5 |
   | `sung` = referência atrasada 1 s | `timingScore` ≤ 2 |
   | `sung` todo `null` | `score` = 0 |
@@ -163,6 +170,11 @@
   | `sung` com só os primeiros 30% da música | `score` ≤ 5 |
   | nota constante (monótona) sobre uma melodia variada | `pitchScore` ≤ 3 |
 - `offsetMs = +500` com o LRC deslocado 500 ms devolve o mesmo `timingScore` do caso sem deslocamento.
+- Sem linhas de letra, `timingScore` = 0 (nota máxima 7.0). Se o LRC é obrigatório ou se a nota
+  renormaliza só para afinação é decisão de sdd-003.
+- Limitação conhecida: linha que a referência canta em legato (sem pausa antes da entrada) não tem
+  onset detectável e vale 0 para qualquer cantor. Observar na calibração do §7; evolução: comparar
+  com o onset da própria referência.
 - Nenhum valor `NaN`; todas as subnotas ficam em [0, 10].
 
 ## 7. Plano de Testes
