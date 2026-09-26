@@ -1,6 +1,8 @@
 import { expect, vi } from "vitest";
+import type { WorkerExtraction } from "../../clients/worker.client.js";
 import type { Prisma, ReferenceStatus, Song } from "../../generated/prisma/client.js";
 import { prisma } from "../../utils/prisma.js";
+import type { ForcedAlignment, PitchTrack, SelectedLyrics, TranscriptWord } from "../../utils/validators.js";
 import { makeMelody } from "./tracks.js";
 
 export const SONG_MS = 60_000;
@@ -25,8 +27,24 @@ export function seedSong(overrides: Partial<Prisma.SongUncheckedCreateInput> = {
   });
 }
 
-/** Diagnóstico de uma letra que já estava em cima da referência (sdd-007). */
-export const PERFECT_ALIGNMENT = { aligned: true, shiftMs: 0, matchedRatio: 1 };
+/** Diagnóstico de uma letra que já estava em cima da referência, alinhada pelas pausas (sdd-007). */
+export const PERFECT_ALIGNMENT = { aligned: true, shiftMs: 0, matchedRatio: 1, method: "onset" };
+
+/**
+ * O que `workerClient.extract*` devolve: a curva, opcionalmente o alinhamento forçado (sdd-010)
+ * e, numa música nova, a letra escolhida (sdd-011) com a transcrição (sdd-012).
+ */
+export function extraction(
+  track: PitchTrack,
+  alignment: ForcedAlignment | null = null,
+  lyrics: SelectedLyrics | null = null,
+  transcript: TranscriptWord[] | null = null,
+): WorkerExtraction {
+  return { track, alignment, lyrics, transcript };
+}
+
+/** A letra de uma música antiga, como vai ao worker (sdd-010: só alinhar). */
+export const KNOWN_LYRICS = { kind: "known", lines: melody.lines } as const;
 
 /**
  * Música com referência pronta (vinda do YouTube) e letra alinhada a ela, como o `markReady`
@@ -48,10 +66,17 @@ export function seedReadySong(overrides: Partial<Prisma.SongUncheckedCreateInput
 
 const BOUNDARY = "----cantorTestBoundary";
 
-/** Corpo multipart com um único arquivo, para `app.inject`. */
-export function multipartFile(content: Buffer, filename = "musica.mp3", field = "file") {
+/**
+ * Corpo multipart com um único arquivo, para `app.inject`. Os `fields` de texto vêm ANTES do
+ * arquivo, como o web manda (é a única ordem em que o controller os enxerga).
+ */
+export function multipartFile(content: Buffer, filename = "musica.mp3", field = "file", fields: Record<string, string> = {}) {
+  const textParts = Object.entries(fields).map(
+    ([name, value]) => `--${BOUNDARY}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+  );
   const head = Buffer.from(
-    `--${BOUNDARY}\r\n` +
+    textParts.join("") +
+      `--${BOUNDARY}\r\n` +
       `Content-Disposition: form-data; name="${field}"; filename="${filename}"\r\n` +
       `Content-Type: audio/mpeg\r\n\r\n`,
   );
@@ -71,6 +96,9 @@ const statusSelect = {
   youtubeVideoId: true,
   alignedLyrics: true,
   lyricsAlignment: true,
+  lyricsSelection: true,
+  lyricsEvidence: true,
+  lyricsRevision: true,
 } as const;
 
 /** Espera o processamento em background chegar ao `status` e devolve o estado gravado. */

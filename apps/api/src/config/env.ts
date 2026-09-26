@@ -36,6 +36,9 @@ export const envSchema = z
     WORKER_URL: z.url().default("http://localhost:8000"),
     // Provedor de letras sincronizadas (LRCLIB). Só muda para apontar a um espelho.
     LRCLIB_BASE_URL: z.url().default("https://lrclib.net"),
+    // Token de serviço das rotas /api/review/* (revisão da letra pelo MCP, sdd-012). Opcional:
+    // sem ela (ou vazia, como o compose passa quando não está no .env), a revisão fica desligada.
+    LYRICS_REVIEW_SECRET: z.preprocess((value) => (value === "" ? undefined : value), secretSchema.optional()),
   })
   .refine((env) => env.NODE_ENV !== "prod" || env.CORS_ALLOWED_ORIGINS.length > 0, {
     path: ["CORS_ALLOWED_ORIGINS"],

@@ -14,23 +14,29 @@ export function normalizeOffsetMs(value: number): number {
   return Math.min(OFFSET_MAX_MS, Math.max(OFFSET_MIN_MS, stepped));
 }
 
-function storageKey(songId: string): string {
-  return `cantor.ia:offset:${songId}`;
+/**
+ * Chave do ajuste no `localStorage`. Vai por música **e por versão da letra**: um ajuste feito
+ * sobre a letra original (LRC) não vale para a letra alinhada pela API, que já chega no tempo
+ * do áudio. Quando a música ganha alinhamento, o ajuste antigo fica de lado e o slider volta a 0,
+ * em vez de deslocar a letra (e a nota) em silêncio.
+ */
+export function offsetStorageKey(songId: string, aligned: boolean): string {
+  return `cantor.ia:offset:${songId}${aligned ? ":aligned" : ""}`;
 }
 
-/** Ajuste memorizado para esta música neste dispositivo (regra 6). */
-export function loadOffsetMs(songId: string): number {
+/** Ajuste memorizado para esta música (nesta versão da letra) neste dispositivo (regra 6). */
+export function loadOffsetMs(songId: string, aligned: boolean): number {
   try {
-    const raw = window.localStorage.getItem(storageKey(songId));
+    const raw = window.localStorage.getItem(offsetStorageKey(songId, aligned));
     return raw === null ? 0 : normalizeOffsetMs(Number(raw));
   } catch {
     return 0;
   }
 }
 
-export function saveOffsetMs(songId: string, offsetMs: number): void {
+export function saveOffsetMs(songId: string, aligned: boolean, offsetMs: number): void {
   try {
-    window.localStorage.setItem(storageKey(songId), String(normalizeOffsetMs(offsetMs)));
+    window.localStorage.setItem(offsetStorageKey(songId, aligned), String(normalizeOffsetMs(offsetMs)));
   } catch {
     // sem storage: o ajuste vale só nesta sessão
   }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { SCORING_CONFIG, scoringService } from "../../services/scoring.service.js";
-import type { ScoreResult } from "../../services/scoring.service.js";
+import type { ScoreOptions, ScoreResult } from "../../services/scoring.service.js";
 import { InvalidReferenceError } from "../../utils/errors.js";
 import { lyricLineSchema, pitchTrackSchema } from "../../utils/validators.js";
 import {
@@ -21,12 +21,29 @@ const SONG_MS = 60_000;
 const melody = makeMelody(42, SONG_MS);
 const { track: reference, lines } = melody;
 
-function score(sung = reference, songLines = lines, options?: { offsetMs: number }) {
+function score(sung = reference, songLines = lines, options?: ScoreOptions) {
   return scoringService.score(reference, sung, songLines, options);
 }
 
+/**
+ * Desafina o primeiro terço para cima e o último para baixo, deixando o meio no lugar: a
+ * mediana das diferenças fica em 0, então a compensação de tom não anula o erro (dois
+ * terços dos frames ficam `semitones` fora).
+ */
+function detuneEdges(track: typeof reference, semitones: number) {
+  const total = track.midi.length;
+  return makeTrack(
+    track.midi.map((value, frame) => {
+      if (value === null) return null;
+      if (frame < total / 3) return Math.round((value + semitones) * 100) / 100;
+      if (frame >= (2 * total) / 3) return Math.round((value - semitones) * 100) / 100;
+      return value;
+    }),
+  );
+}
+
 function expectWellFormed(result: ScoreResult) {
-  for (const value of [result.score, result.pitchScore, result.timingScore]) {
+  for (const value of [result.score, result.pitchScore, result.timingScore, result.rhythmScore]) {
     expect(Number.isNaN(value)).toBe(false);
     expect(value).toBeGreaterThanOrEqual(0);
     expect(value).toBeLessThanOrEqual(10);
@@ -51,6 +68,8 @@ describe("scoringService.score — casos sintéticos", () => {
     expect(result.score).toBe(10);
     expect(result.pitchScore).toBe(10);
     expect(result.timingScore).toBe(10);
+    expect(result.rhythmScore).toBe(10);
+    expect(result.difficulty).toBe("HARD");
     expect(result.keyOffsetSemitones).toBe(0);
     expect(result.coverage).toBe(1);
     expect(result.lines).toHaveLength(lines.length);
@@ -102,6 +121,7 @@ describe("scoringService.score — casos sintéticos", () => {
     expect(result.score).toBe(0);
     expect(result.pitchScore).toBe(0);
     expect(result.timingScore).toBe(0);
+    expect(result.rhythmScore).toBe(0);
     expect(result.coverage).toBe(0);
     expect(result.keyOffsetSemitones).toBe(0);
     expect(result.lines.every((line) => line.onsetDeltaMs === null && line.score === 0)).toBe(true);
@@ -154,6 +174,28 @@ describe("scoringService.score — letra", () => {
     expect(score(sung, shiftLines(lines, 700), { offsetMs: 700 }).timingScore).toBe(baseline.timingScore);
   });
 
+  it("um reinício curto no rabo da linha anterior não vira a entrada da linha", () => {
+    // Voz 100 ms atrasada e, antes das linhas cuja pausa anterior é longa o bastante, um
+    // "reinício" de 50 ms 600 ms antes do verso, cercado de silêncio: falha de detecção
+    // típica no fim da frase anterior. O onset da linha tem de continuar sendo a entrada
+    // real (+100 ms), e não o reinício (-600 ms, que valeria 0,5).
+    const sung = delay(reference, 100);
+    const midi = [...sung.midi];
+    let blips = 0;
+    for (const line of lines.slice(1)) {
+      const blipStart = line.startMs / 10 - 60;
+      const quiet = midi.slice(blipStart - 5, blipStart + 10).every((value) => value === null);
+      if (!quiet) continue;
+      for (let frame = blipStart; frame < blipStart + 5; frame++) midi[frame] = 64;
+      blips++;
+    }
+    expect(blips).toBeGreaterThan(3);
+
+    const result = score(makeTrack(midi));
+    expect(result.lines.every((line) => line.onsetDeltaMs === 100 && line.score === 1)).toBe(true);
+    expect(result.timingScore).toBe(10);
+  });
+
   it("linhas sem texto ou sem voz na referência não contam", () => {
     const firstFrame = lines[0]!.startMs / 10;
     const firstPhraseEnd = reference.midi.findIndex((value, frame) => frame > firstFrame && value === null) * 10;
@@ -184,11 +226,173 @@ describe("scoringService.score — letra", () => {
     expect(result.timingScore).toBe(5);
   });
 
-  it("sem linhas, o tempo é 0 e a nota fica só com a afinação", () => {
+  it("sem linhas, o tempo é 0 e a nota fica só com a afinação (e o ritmo, se pesar)", () => {
     const result = score(reference, []);
     expect(result.timingScore).toBe(0);
     expect(result.lines).toEqual([]);
-    expect(result.score).toBe(10 * SCORING_CONFIG.weights.pitch);
+    // HARD: 0,5·afinação + 0,5·tempo (sdd-009 mudou de 0,7/0,3).
+    expect(result.score).toBe(10 * SCORING_CONFIG.levels.HARD.weights.pitch);
+  });
+});
+
+describe("scoringService.score — níveis (sdd-009)", () => {
+  const hard = { difficulty: "HARD" } as const;
+  const medium = { difficulty: "MEDIUM" } as const;
+  const easy = { difficulty: "EASY" } as const;
+
+  describe("padrão", () => {
+    it("sem difficulty, o resultado é idêntico ao HARD", () => {
+      const sung = addNoise(reference, 3, 60);
+      expect(score(sung)).toEqual(score(sung, lines, hard));
+      expect(score(sung).difficulty).toBe("HARD");
+    });
+
+    it("os pesos de cada nível somam 1", () => {
+      for (const level of Object.values(SCORING_CONFIG.levels)) {
+        const { pitch, timing, rhythm } = level.weights;
+        expect(pitch + timing + rhythm).toBeCloseTo(1, 10);
+      }
+    });
+  });
+
+  describe("HARD", () => {
+    it("mantém os limiares de afinação (50/100 cents) com pesos 0,5/0,5", () => {
+      expect(SCORING_CONFIG.levels.HARD.pitch).toEqual({ fullCreditCents: 50, zeroCreditCents: 100 });
+      expect(SCORING_CONFIG.levels.HARD.weights).toEqual({ pitch: 0.5, timing: 0.5, rhythm: 0 });
+    });
+
+    it("75 cents fora (sem compensação de tom) vale afinação entre 5 e 7", () => {
+      // Dois terços dos frames caem no meio da rampa 50→100 (0,5 cada); o terço do meio vale 1.
+      const result = score(detuneEdges(reference, 0.75), lines, hard);
+      expect(result.keyOffsetSemitones).toBe(0);
+      expect(result.pitchScore).toBeGreaterThanOrEqual(5);
+      expect(result.pitchScore).toBeLessThanOrEqual(7);
+    });
+
+    it("o ritmo é calculado mas não pesa: cantar tudo sem parar não muda a nota", () => {
+      const result = score(randomNotes(99, SONG_MS), lines, hard);
+      expect(result.rhythmScore).toBeGreaterThan(0);
+      expect(result.score).toBeCloseTo(0.5 * result.pitchScore + 0.5 * result.timingScore, 0);
+    });
+  });
+
+  describe("MEDIUM", () => {
+    it("cantar a própria referência vale 10 (afinação, tempo e ritmo 10)", () => {
+      const result = score(reference, lines, medium);
+      expect(result).toMatchObject({ score: 10, pitchScore: 10, timingScore: 10, rhythmScore: 10, difficulty: "MEDIUM" });
+    });
+
+    it("75 cents fora vale afinação 10 (no difícil fica entre 5 e 7)", () => {
+      const sung = detuneEdges(reference, 0.75);
+      expect(score(sung, lines, medium).pitchScore).toBe(10);
+      expect(score(sung, lines, hard).pitchScore).toBeLessThanOrEqual(7);
+    });
+
+    it("150 cents fora vale afinação ≈ 6,7 (meio da rampa 100→200 em dois terços dos frames)", () => {
+      const result = score(detuneEdges(reference, 1.5), lines, medium);
+      expect(result.pitchScore).toBeGreaterThanOrEqual(6);
+      expect(result.pitchScore).toBeLessThanOrEqual(7.5);
+    });
+
+    it("250 cents fora zera os frames desafinados nos dois níveis", () => {
+      const sung = detuneEdges(reference, 2.5);
+      // Só o terço do meio (no lugar) pontua, mais o que a janela de ±150 ms acha nas
+      // bordas das frases: ≈ 3,3 a 4,5 nos dois níveis.
+      for (const options of [medium, hard]) {
+        const result = score(sung, lines, options);
+        expect(result.pitchScore).toBeGreaterThanOrEqual(2.5);
+        expect(result.pitchScore).toBeLessThanOrEqual(5);
+      }
+    });
+
+    it("nota fixa errada no ritmo certo: tempo 10, ritmo 10 e a nota fica em 0,5·afinação + 5", () => {
+      const result = score(constant(reference, 40), lines, medium);
+      expect(result.timingScore).toBe(10);
+      expect(result.rhythmScore).toBe(10);
+      expect(result.pitchScore).toBeLessThan(5);
+      expect(result.score).toBeCloseTo(0.5 * result.pitchScore + 5, 0);
+    });
+
+    it("cantar em outro tom continua compensado", () => {
+      const result = score(transpose(reference, 5), lines, medium);
+      expect(result.score).toBeGreaterThanOrEqual(9.8);
+      expect(result.keyOffsetSemitones).toBeCloseTo(5, 1);
+    });
+  });
+
+  describe("EASY", () => {
+    it("cantar a própria referência vale 10", () => {
+      const result = score(reference, lines, easy);
+      expect(result).toMatchObject({ score: 10, timingScore: 10, rhythmScore: 10, difficulty: "EASY" });
+    });
+
+    it("transposta 5 semitons vale 10", () => {
+      expect(score(transpose(reference, 5), lines, easy).score).toBe(10);
+    });
+
+    it("nota fixa errada no ritmo certo vale 10 no fácil e menos de 6,5 no difícil", () => {
+      const sung = constant(reference, 40);
+      expect(score(sung, lines, easy).score).toBe(10);
+      expect(score(sung, lines, hard).score).toBeLessThan(6.5);
+    });
+
+    it("a afinação é calculada (informativa) mas não pesa na nota", () => {
+      const result = score(constant(reference, 40), lines, easy);
+      expect(result.pitchScore).toBeLessThan(10);
+      expect(result.score).toBe(10);
+    });
+
+    it("cantar sem parar: tempo ≈ 0 (sem onsets) e a nota fica só com a precisão do ritmo", () => {
+      // A melodia sintética quase não tem silêncio (pausas de 500–900 ms, e a folga de
+      // ±150 ms cobre parte delas), então a precisão fica alta (≈ 0,9). Numa música real,
+      // com intro e pausas longas, a precisão cai para a fração de voz (~0,6): ver o caso
+      // seguinte, com silêncio na referência.
+      const result = score(randomNotes(99, SONG_MS), lines, easy);
+      expect(result.timingScore).toBeLessThanOrEqual(1);
+      expect(result.rhythmScore).toBeGreaterThanOrEqual(6);
+      expect(result.rhythmScore).toBeLessThanOrEqual(9.5);
+      expect(result.score).toBeLessThan(5);
+    });
+
+    it("falar por cima de uma música com metade de silêncio: ritmo ≈ 6,7 (precisão 0,5) e nota < 4", () => {
+      // Referência com a segunda metade muda; a pessoa fala do começo ao fim.
+      const half = truncate(reference, 0.5);
+      const result = scoringService.score(half, randomNotes(99, SONG_MS), lines, easy);
+      expect(result.timingScore).toBeLessThanOrEqual(1);
+      expect(result.rhythmScore).toBeGreaterThanOrEqual(6);
+      expect(result.rhythmScore).toBeLessThanOrEqual(7.5);
+      expect(result.score).toBeLessThan(4);
+    });
+
+    it("silêncio vale 0", () => {
+      const result = score(silence(reference), lines, easy);
+      expect(result.score).toBe(0);
+      expect(result.rhythmScore).toBe(0);
+    });
+
+    it("cantar só a primeira metade: ritmo ≈ 6,7 (recall 0,5, precisão 1) e tempo ≈ 5", () => {
+      const result = score(truncate(reference, 0.5), lines, easy);
+      expect(result.rhythmScore).toBeGreaterThanOrEqual(6);
+      expect(result.rhythmScore).toBeLessThanOrEqual(7.5);
+      expect(result.timingScore).toBeGreaterThanOrEqual(4);
+      expect(result.timingScore).toBeLessThanOrEqual(6);
+      expect(result.score).toBeCloseTo(0.5 * result.timingScore + 0.5 * result.rhythmScore, 0);
+    });
+  });
+
+  describe("ritmo", () => {
+    it("um atraso de 100 ms (dentro da folga de ±150 ms) mantém o ritmo 10", () => {
+      expect(score(delay(reference, 100), lines, easy).rhythmScore).toBe(10);
+    });
+
+    it("cantar sem parar vale a fração de voz da referência como precisão", () => {
+      const voiced = reference.midi.filter((value) => value !== null).length / reference.midi.length;
+      const expectedF1 = (2 * voiced) / (1 + voiced); // recall 1
+      const result = score(randomNotes(7, SONG_MS), lines, easy);
+      // A folga de ±150 ms conta como acerto os frames colados nas frases: um pouco acima do F1 cru.
+      expect(result.rhythmScore).toBeGreaterThanOrEqual(10 * expectedF1 - 0.5);
+      expect(result.rhythmScore).toBeLessThanOrEqual(10 * expectedF1 + 2);
+    });
   });
 });
 

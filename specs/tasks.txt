@@ -93,7 +93,77 @@ Fora do MVP: acerto de letra via Whisper, tempo por palavra, instrumental, login
    fácil, resultado com os medidores do nível. Implementar depois da sdd-007 (a letra alinhada
    é pré-requisito de qualquer nota de tempo justa).
 
-Pendente (ainda não planejado — virará sdd-010):
+10. sdd-010-lyrics-forced-alignment — alinhar a letra ao áudio pelo TEXTO, com IA. Pedido do
+    usuário (2026-09-26), depois de testar a sdd-007: "não deu certo. pense em outras
+    estratégias. pode até usar AI pra isso. melhorou mas ainda tenho que ajustar manualmente o
+    tempo antes de ficar bom". Diagnóstico nos dados reais: a voz isolada quase não tem pausas
+    entre linhas (trechos de 2–5 s, só 12–30 inícios de frase para 30–70 linhas), então casar
+    linha com pausa (sdd-007) alinhou 1 música em 11. Solução: alinhamento forçado (CTC) da
+    letra conhecida sobre a voz isolada, no worker, na mesma passada do Demucs, com o
+    `torchaudio.pipelines.MMS_FA` já instalado (sem dependência nova; checkpoint de 1,26 GB
+    baixado uma vez). Cada linha ganha o instante em que suas palavras são cantadas; a API
+    aceita linha a linha por pontuação e mantém o método por pausas como fallback. Flag `redo`
+    nas rotas de referência para refazer as músicas já cadastradas. Etapa 0 com go/no-go em 3
+    músicas reais; plano B (Whisper) só se o spike falhar.
+
+11. sdd-011-lyrics-from-video — escolher só o vídeo e a letra vir sozinha. Pedido do usuário
+    (2026-09-26): "acho que dá pra simplificar isso" (hoje escolhe a música duas vezes: a letra
+    no LRCLIB e depois o vídeo no YouTube) e "pegar músicas novas BR como de Tim Bernardes que o
+    LRCLIB não tem". Fluxo: a pessoa busca e escolhe o vídeo; a letra é buscada nos bastidores em
+    várias fontes (LRCLIB, aceitando letra só em texto, que hoje é recusada com
+    `SongWithoutSyncedLyricsError`; YouTube Music via `app/ytmusic.py`, letra licenciada do
+    Musixmatch); o Whisper transcreve a voz isolada e escolhe a letra que mais combina com o que
+    foi cantado (resolve letra de outra versão, como o Tempo Perdido); sem letra que combine, a
+    transcrição do Whisper vira a letra, com aviso de "letra automática". O tempo de cada verso
+    sempre vem do MMS_FA (sdd-010). Spike (scripts/transcribe_spike.py, 8 músicas, Mac ARM,
+    whisper-large-v3-turbo via mlx-whisper): WER mediano 8 %, 7–9 % em pt e en limpos, 19 % no
+    rap (Papercut, versos colados), 72 % na voz embolada (Smells Like Teen Spirit); 9–42 s por
+    música. LLM descartado (letra de memória: direitos autorais, versão errada, invenção).
+
+12. sdd-012-lyrics-review-mcp — revisar a letra das músicas pelo Claude Code, via MCP. Pedido do
+    usuário (2026-09-26): "tem como fazer um MCP entre você e o sistema? pra você corrigir
+    detalhes da letra", no lugar de um LLM pago por API (revisão automática) ou de scraping do
+    Vagalume ("o problema do scraping é a manutenção"). Contexto: na Etapa 0 da sdd-011, quando
+    nenhum site tem a letra (LRCLIB fora do ar, música sem letra no YouTube Music), a letra vira
+    a transcrição do Whisper, com erros de palavra (Christina Perri 12 %, Papercut 37 %, versos
+    colados no rap). Fluxo desejado: o usuário pede no Claude Code "revisa a letra de X"; o
+    Claude lê os versos (texto, tempo, confiança do alinhamento), a transcrição e as candidatas
+    dos sites, propõe trocas pontuais, o sistema confere cada troca no áudio (score do MMS_FA
+    antes/depois) e só grava o que o usuário aprovar, realinhando a letra. Exige: guardar a
+    transcrição e as candidatas (hoje o worker descarta), rota de edição protegida (a API não
+    tem login nessas rotas), realinhamento só da letra (sem refazer melodia e transcrição) e o
+    servidor MCP no repositório, registrado no `.mcp.json`. Limite: o Claude não escreve letra
+    inteira de memória (direitos autorais); corrige pontos com base na transcrição e nas fontes.
+
+13. sdd-013-singer-volume — controlar o volume da voz do cantor original durante o karaokê, sem
+    mexer no instrumental. Pedido do usuário (2026-09-26): "dá pra baixar um pouco o volume da
+    voz do cantor pra a gente ouvir mais nossa voz? sem baixar o volume do instrumental. Até
+    mesmo um controle pra o volume da voz do cantor durante o karaokê". Hoje o browser toca o
+    áudio inteiro do YouTube (voz + instrumental num arquivo só). Solução: o worker separa a
+    música em duas trilhas (voz e instrumental, Demucs, que ele já roda na preparação) sob
+    demanda, o browser guarda as duas no IndexedDB (o servidor continua sem guardar áudio,
+    regra 13 da sdd-003) e toca as duas sincronizadas, com um slider "Voz do cantor" antes e
+    durante a cantoria; a segunda saída (sdd do áudio em duas fontes) recebe a mistura ajustada.
+    Opção "separar na hora" (a recomendada entre as duas apresentadas; a outra era guardar as
+    trilhas no servidor), por seguir a regra de não guardar áudio; o usuário pediu o plano sem
+    escolher explicitamente.
+
+14. sdd-014-transcription-openai — transcrever a voz pela API da OpenAI para tirar peso da CPU.
+    Pedido do usuário (2026-09-26): "ficou pesado pra nossa CPU", "o mais fácil é o Whisper, faça
+    com ele". O Whisper local (sdd-011) leva 21–89 s de CPU por música. Decisões do usuário:
+    modelo `whisper-1` (único da OpenAI com tempo por palavra, que o pipeline usa) e, sem chave
+    ou com a API fora, manter o Whisper local como reserva. Chave em `OPENAI_API_KEY`, só no
+    worker.
+
+15. sdd-015-lyrics-first-search — a busca volta a ser pelo LRCLIB como caminho principal, com a
+    busca pelo vídeo (sdd-011) como alternativa. Pedido do usuário (2026-09-26): "é muito
+    complexo/arriscado voltar atrás e trazer de volta a lógica de escolher a letra com a lib e
+    depois pegar um vídeo do YouTube? era melhor antes, era mais rápido" → "isso, faça isso,
+    planeje", sobre a proposta híbrida: pela letra (LRCLIB, letra sincronizada, sem Whisper, o
+    vídeo escolhido depois na sugestão da sdd-008) por padrão; quando o LRCLIB não tiver a
+    música, "procurar pelo vídeo" (YouTube Music + Whisper, sdd-011).
+
+Pendente (ainda não planejado — virará sdd-016):
 
 Adicionar endpoint de refresh token no fluxo de autenticação da API.
 

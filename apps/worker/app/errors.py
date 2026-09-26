@@ -14,6 +14,9 @@ WorkerErrorCode = Literal[
     "invalid_video_id",
     "video_unavailable",
     "download_failed",
+    "invalid_lyrics",
+    "invalid_query",
+    "search_failed",
     "internal",
 ]
 
@@ -25,6 +28,9 @@ STATUS_BY_CODE: dict[str, int] = {
     "invalid_video_id": 400,
     "video_unavailable": 422,
     "download_failed": 502,
+    "invalid_lyrics": 400,
+    "invalid_query": 400,
+    "search_failed": 502,
     "internal": 500,
 }
 

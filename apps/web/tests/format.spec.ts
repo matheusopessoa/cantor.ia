@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAlignmentShift, formatDuration, formatElapsed, formatOffset, formatOrdinal, formatScore } from "../lib/format";
+import { formatDuration, formatElapsed, formatOffset, formatOrdinal, formatScore } from "../lib/format";
 import { gradeForScore } from "../lib/grade";
 import { normalizeOffsetMs } from "../lib/lyrics-offset";
 
@@ -37,15 +37,6 @@ describe("formatOffset", () => {
     expect(formatOffset(0)).toBe("+0.0s");
     expect(formatOffset(500)).toBe("+0.5s");
     expect(formatOffset(-1200)).toBe("-1.2s");
-  });
-});
-
-describe("formatAlignmentShift", () => {
-  it("segundos em pt-BR com sinal e espaço antes da unidade", () => {
-    expect(formatAlignmentShift(3200)).toBe("+3,2 s");
-    expect(formatAlignmentShift(-500)).toBe("-0,5 s");
-    expect(formatAlignmentShift(0)).toBe("+0,0 s");
-    expect(formatAlignmentShift(Number.NaN)).toBe("+0,0 s");
   });
 });
 

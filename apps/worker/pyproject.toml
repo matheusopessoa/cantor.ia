@@ -1,13 +1,16 @@
 [project]
 name = "cantor-worker"
-version = "0.1.0"
+version = "0.6.1"
 description = "Extrai a curva de pitch da voz de uma música (arquivo ou YouTube) para o cantor.ia"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "demucs>=4.1.0",
     "fastapi>=0.141.1",
+    "faster-whisper>=1.2.1",
+    "httpx>=0.28.1",
     "numpy>=2.5.3",
+    "pydantic-settings>=2.15.0",
     "python-multipart>=0.0.32",
     "soundfile>=0.14.0",
     "torch>=2.14.0",
@@ -15,6 +18,7 @@ dependencies = [
     "torchcrepe>=0.0.24",
     "uvicorn[standard]>=0.54.0",
     "yt-dlp>=2026.8.19",
+    "ytmusicapi>=1.12.3",
 ]
 
 [tool.uv]
@@ -30,13 +34,12 @@ environments = [
 testpaths = ["tests"]
 markers = [
     "slow: roda o Demucs de verdade (fora da suíte padrão)",
-    "network: baixa do YouTube de verdade (fora da suíte padrão)",
+    "network: baixa do YouTube ou chama a OpenAI de verdade (fora da suíte padrão)",
 ]
 addopts = "-m 'not slow and not network'"
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
     "matplotlib>=3.11.2",
     "pytest>=9.1.1",
 ]

@@ -1,21 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../../app.js";
-import { lrclibClient, type LrclibTrack } from "../../clients/lrclib.client.js";
-import { LyricsProviderUnavailableError } from "../../utils/errors.js";
-import { seedSong, VIDEO_ID } from "../helpers/songs.js";
+import { WorkerClientError, workerClient, type WorkerYtmusicSong } from "../../clients/worker.client.js";
+import { seedReadySong, seedSong, VIDEO_ID } from "../helpers/songs.js";
 
-vi.mock("../../clients/lrclib.client.js", () => ({
-  lrclibClient: { search: vi.fn(), getById: vi.fn() },
-}));
+vi.mock("../../clients/worker.client.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../clients/worker.client.js")>();
+  return { ...original, workerClient: { searchYtmusic: vi.fn() } };
+});
 
-function track(id: number, overrides: Partial<LrclibTrack> = {}): LrclibTrack {
+const OTHER_ID = "aaaaaaaaaaa";
+const THIRD_ID = "bbbbbbbbbbb";
+
+function result(videoId: string, overrides: Partial<WorkerYtmusicSong> = {}): WorkerYtmusicSong {
   return {
-    id,
-    trackName: `Faixa ${id}`,
-    artistName: "Artista",
-    albumName: "Álbum",
-    duration: 60,
-    syncedLyrics: "[00:01.00]oi",
+    videoId,
+    title: `Faixa ${videoId}`,
+    artist: "Artista",
+    album: "Álbum",
+    durationS: 201.5,
+    lyrics: { status: "none", source: null, lines: [] },
     ...overrides,
   };
 }
@@ -25,79 +28,61 @@ function search(q: string) {
 }
 
 beforeEach(() => {
-  vi.mocked(lrclibClient.search).mockReset();
+  vi.mocked(workerClient.searchYtmusic).mockReset();
 });
 
-describe("GET /api/songs/search", () => {
-  it("devolve só faixas com letra sincronizada, em ms", async () => {
-    vi.mocked(lrclibClient.search).mockResolvedValue([
-      track(1),
-      track(2, { syncedLyrics: null }),
-      track(3, { duration: 201.5, albumName: null }),
-    ]);
+describe("GET /api/songs/search (sdd-011: YouTube Music)", () => {
+  it("devolve os resultados do YouTube Music, em ms, sem letra", async () => {
+    vi.mocked(workerClient.searchYtmusic).mockResolvedValue([result(VIDEO_ID), result(OTHER_ID, { album: null, durationS: null })]);
 
-    const response = await search("hey jude");
+    const response = await search("tim bernardes");
 
     expect(response.statusCode).toBe(200);
+    expect(workerClient.searchYtmusic).toHaveBeenCalledWith("tim bernardes");
     expect(response.json()).toEqual([
-      {
-        lrclibId: 1,
-        artist: "Artista",
-        title: "Faixa 1",
-        album: "Álbum",
-        durationMs: 60_000,
-        songId: null,
-        referenceStatus: null,
-        youtubeVideoId: null,
-      },
-      {
-        lrclibId: 3,
-        artist: "Artista",
-        title: "Faixa 3",
-        album: null,
-        durationMs: 201_500,
-        songId: null,
-        referenceStatus: null,
-        youtubeVideoId: null,
-      },
-    ]);
-    expect(lrclibClient.search).toHaveBeenCalledWith("hey jude");
-  });
-
-  it("anexa songId, referenceStatus e youtubeVideoId das músicas já cadastradas", async () => {
-    const song = await seedSong({ lrclibId: 2, referenceStatus: "READY", youtubeVideoId: VIDEO_ID });
-    vi.mocked(lrclibClient.search).mockResolvedValue([track(1), track(2)]);
-
-    const response = await search("qualquer");
-
-    expect(response.json()).toMatchObject([
-      { lrclibId: 1, songId: null, referenceStatus: null },
-      { lrclibId: 2, songId: song.id, referenceStatus: "READY", youtubeVideoId: VIDEO_ID },
+      { videoId: VIDEO_ID, artist: "Artista", title: `Faixa ${VIDEO_ID}`, album: "Álbum", durationMs: 201_500, songId: null, referenceStatus: null },
+      { videoId: OTHER_ID, artist: "Artista", title: `Faixa ${OTHER_ID}`, album: null, durationMs: null, songId: null, referenceStatus: null },
     ]);
   });
 
-  it("limita a 20 resultados", async () => {
-    vi.mocked(lrclibClient.search).mockResolvedValue(
-      Array.from({ length: 25 }, (_, index) => track(index + 1)),
-    );
+  it("anexa o estado da música nova (pelo vídeo escolhido) e da antiga (pelo vídeo da referência)", async () => {
+    const created = await seedSong({ lrclibId: null, sourceVideoId: VIDEO_ID, lyrics: [] });
+    const legacy = await seedReadySong({ lrclibId: 55, youtubeVideoId: OTHER_ID });
+    vi.mocked(workerClient.searchYtmusic).mockResolvedValue([result(VIDEO_ID), result(OTHER_ID), result(THIRD_ID)]);
 
-    const response = await search("muitas");
+    const items = (await search("artista")).json();
 
-    expect(response.json()).toHaveLength(20);
+    expect(items.map((item: { songId: string | null; referenceStatus: string | null }) => [item.songId, item.referenceStatus])).toEqual([
+      [created.id, "NONE"],
+      [legacy.id, "READY"],
+      [null, null],
+    ]);
   });
 
-  it("q com menos de 2 caracteres → 400 sem consultar o LRCLIB", async () => {
-    const response = await search("a");
+  it("vídeo que é o escolhido de uma música e a referência de outra: vale a nova", async () => {
+    const legacy = await seedReadySong({ lrclibId: 55, youtubeVideoId: VIDEO_ID });
+    const created = await seedSong({ lrclibId: null, sourceVideoId: VIDEO_ID, lyrics: [] });
+    vi.mocked(workerClient.searchYtmusic).mockResolvedValue([result(VIDEO_ID)]);
+
+    const [item] = (await search("artista")).json();
+
+    expect(item.songId).toBe(created.id);
+    expect(item.songId).not.toBe(legacy.id);
+  });
+
+  it.each(["a", " ", "x".repeat(101)])("q inválido (%j) → 400 sem chamar o worker", async (q) => {
+    const response = await search(q);
 
     expect(response.statusCode).toBe(400);
-    expect(lrclibClient.search).not.toHaveBeenCalled();
+    expect(workerClient.searchYtmusic).not.toHaveBeenCalled();
   });
 
-  it("LRCLIB fora → 502", async () => {
-    vi.mocked(lrclibClient.search).mockRejectedValue(new LyricsProviderUnavailableError());
+  it("worker ou YouTube Music fora do ar → 502 SEARCH_FAILED", async () => {
+    vi.mocked(workerClient.searchYtmusic).mockRejectedValue(new WorkerClientError("search_failed", "ytmusicapi quebrou"));
 
-    const response = await search("hey jude");
+    const response = await search("artista");
 
     expect(response.statusCode).toBe(502);
+    expect(response.json().code).toBe("SEARCH_FAILED");
   });
 });

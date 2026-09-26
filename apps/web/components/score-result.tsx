@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
+import { DIFFICULTY_LABEL } from "@/lib/difficulty";
 import { formatScore } from "@/lib/format";
 import { gradeForScore } from "@/lib/grade";
 import type { PerformanceResult } from "@/lib/types";
@@ -46,12 +47,60 @@ function timingRemark(result: PerformanceResult): string | null {
   return missed === 1 ? "Faltou entrar no tempo em 1 verso." : `Faltou entrar no tempo em ${missed} versos.`;
 }
 
-/** Placar final: nota em Press Start, conceito, medidores e posição no ranking. */
+type MeterKind = "pitch" | "timing" | "rhythm";
+
+/** Rótulo e cor de cada medidor (`.ct-meter--pitch/--timing/--rhythm` do DS). */
+const METER: Record<MeterKind, { label: string; valueClass: string }> = {
+  pitch: { label: "Afinação", valueClass: "ct-neon-cyan" },
+  timing: { label: "Tempo", valueClass: "ct-neon-pink" },
+  rhythm: { label: "Ritmo", valueClass: "text-fret-green" },
+};
+
+function Meter({ kind, value }: { kind: MeterKind; value: number }) {
+  const { label, valueClass } = METER[kind];
+  return (
+    <div className={`ct-meter ct-meter--${kind}`}>
+      <div className="ct-meter__head">
+        <span className="ct-label">{label}</span>
+        <span className={`ct-numeric ${valueClass}`}>{formatScore(value)}</span>
+      </div>
+      <div
+        className="ct-meter__bar"
+        style={{ "--value": value / 10 } as CSSProperties}
+        role="meter"
+        aria-valuemin={0}
+        aria-valuemax={10}
+        aria-valuenow={value}
+        aria-label={label}
+      />
+    </div>
+  );
+}
+
+/**
+ * Medidores do nível (sdd-009): o fácil não mede afinação, então mostra Tempo e Ritmo; médio
+ * e difícil mostram Afinação e Tempo.
+ */
+function metersFor(result: PerformanceResult): { kind: MeterKind; value: number }[] {
+  if (result.difficulty === "EASY") {
+    return [
+      { kind: "timing", value: result.timingScore },
+      { kind: "rhythm", value: result.rhythmScore },
+    ];
+  }
+  return [
+    { kind: "pitch", value: result.pitchScore },
+    { kind: "timing", value: result.timingScore },
+  ];
+}
+
+/** Placar final: nota em Press Start, conceito, medidores do nível e posição no ranking. */
 export function ScoreResult({ result, songId, onRetry }: ScoreResultProps) {
   const shown = useCountUp(result.score);
   const grade = gradeForScore(result.score);
   const isRecord = result.rank === 1;
   const remark = timingRemark(result);
+  const level = DIFFICULTY_LABEL[result.difficulty];
 
   return (
     <section className="ct-panel ct-panel--pink grid justify-items-center gap-8 px-6 py-12" aria-label="Resultado">
@@ -59,7 +108,7 @@ export function ScoreResult({ result, songId, onRetry }: ScoreResultProps) {
 
       <div className="flex flex-wrap items-center justify-center gap-8">
         <div className="ct-score">
-          <span className="ct-label">Sua nota</span>
+          <span className="ct-label">Sua nota · {level}</span>
           <span className="ct-score__value">
             {formatScore(shown)}
             <span className="ct-score__max">/10</span>
@@ -71,41 +120,14 @@ export function ScoreResult({ result, songId, onRetry }: ScoreResultProps) {
       </div>
 
       <p className="text-center text-fg-2">
-        {isRecord ? "Novo recorde. Seu nome está no topo." : `Você ficou em ${result.rank}º lugar.`}
+        {isRecord ? `Novo recorde no ${level.toLowerCase()}. Seu nome está no topo.` : `Você ficou em ${result.rank}º lugar no ${level.toLowerCase()}.`}
         {remark ? ` ${remark}` : ""}
       </p>
 
       <div className="grid w-full gap-4">
-        <div className="ct-meter ct-meter--pitch">
-          <div className="ct-meter__head">
-            <span className="ct-label">Afinação</span>
-            <span className="ct-numeric ct-neon-cyan">{formatScore(result.pitchScore)}</span>
-          </div>
-          <div
-            className="ct-meter__bar"
-            style={{ "--value": result.pitchScore / 10 } as CSSProperties}
-            role="meter"
-            aria-valuemin={0}
-            aria-valuemax={10}
-            aria-valuenow={result.pitchScore}
-            aria-label="Afinação"
-          />
-        </div>
-        <div className="ct-meter ct-meter--timing">
-          <div className="ct-meter__head">
-            <span className="ct-label">Tempo</span>
-            <span className="ct-numeric ct-neon-pink">{formatScore(result.timingScore)}</span>
-          </div>
-          <div
-            className="ct-meter__bar"
-            style={{ "--value": result.timingScore / 10 } as CSSProperties}
-            role="meter"
-            aria-valuemin={0}
-            aria-valuemax={10}
-            aria-valuenow={result.timingScore}
-            aria-label="Tempo"
-          />
-        </div>
+        {metersFor(result).map((meter) => (
+          <Meter key={meter.kind} kind={meter.kind} value={meter.value} />
+        ))}
       </div>
 
       <div className="flex flex-wrap justify-center gap-4">

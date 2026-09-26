@@ -16,6 +16,8 @@ export interface RecorderOptions {
   latency: number;
   /** Chamado a cada frame de 10 ms gravado (índice e nota), para o gráfico ao vivo. */
   onFrame?: (index: number, midi: number | null) => void;
+  /** Ganho inicial (0–1) do retorno do microfone no fone. 0 = sem retorno. */
+  monitorGain?: number;
 }
 
 export interface Recorder {
@@ -23,6 +25,8 @@ export interface Recorder {
   readonly frames: (number | null)[];
   /** Tempo médio por hop (ms), para o critério de "< 2 ms" do plano. */
   averageHopMs(): number;
+  /** Muda o volume (0–1) do retorno do microfone no fone, sem estalo. */
+  setMonitorGain(gain: number): void;
   /** Para de gravar e libera o worklet e as tracks do microfone. */
   stop(): void;
 }
@@ -54,7 +58,7 @@ export async function loadCaptureWorklet(context: AudioContext): Promise<void> {
  * anteriores a `startTime` são descartados; buracos (mensagens perdidas) viram `null`.
  */
 export function createRecorder(options: RecorderOptions): Recorder {
-  const { context, stream, startTime, latency, onFrame } = options;
+  const { context, stream, startTime, latency, onFrame, monitorGain = 0 } = options;
   const sampleRate = context.sampleRate;
   const hopSamples = Math.round(sampleRate / (1000 / HOP_MS));
 
@@ -104,9 +108,20 @@ export function createRecorder(options: RecorderOptions): Recorder {
 
   source.connect(node);
 
+  // Retorno: a voz crua (sem cancelamento de eco) volta para a saída, somada à música. Não passa
+  // pelo worklet, então não mexe na detecção de pitch.
+  const monitor = context.createGain();
+  monitor.gain.value = monitorGain;
+  source.connect(monitor);
+  monitor.connect(context.destination);
+
   return {
     frames,
     averageHopMs: () => (hops === 0 ? 0 : totalHopMs / hops),
+    setMonitorGain(gain) {
+      if (stopped) return;
+      monitor.gain.setTargetAtTime(gain, context.currentTime, 0.02);
+    },
     stop() {
       if (stopped) return;
       stopped = true;
@@ -114,6 +129,7 @@ export function createRecorder(options: RecorderOptions): Recorder {
       try {
         source.disconnect();
         node.disconnect();
+        monitor.disconnect();
       } catch {
         // já desconectado
       }

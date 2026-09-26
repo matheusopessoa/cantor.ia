@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../../app.js";
 import { WorkerClientError, workerClient, type WorkerClientErrorCode } from "../../clients/worker.client.js";
 import { prisma } from "../../utils/prisma.js";
-import { melody, multipartFile, seedReadySong, seedSong, SONG_MS, VIDEO_ID, waitForReferenceStatus } from "../helpers/songs.js";
-import { makeTrack, shiftLines } from "../helpers/tracks.js";
+import { extraction, KNOWN_LYRICS, melody, multipartFile, seedReadySong, seedSong, SONG_MS, VIDEO_ID, waitForReferenceStatus } from "../helpers/songs.js";
+import { forcedFrom, makeTrack, shiftLines } from "../helpers/tracks.js";
 
 vi.mock("../../clients/worker.client.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("../../clients/worker.client.js")>();
@@ -15,8 +15,8 @@ vi.mock("../../clients/worker.client.js", async (importOriginal) => {
 
 const URL = `https://www.youtube.com/watch?v=${VIDEO_ID}&t=10s`;
 
-function fromYoutube(id: string, url = URL) {
-  return app.inject({ method: "POST", url: `/api/songs/${id}/reference/youtube`, payload: { url } });
+function fromYoutube(id: string, url = URL, extra: Record<string, unknown> = {}) {
+  return app.inject({ method: "POST", url: `/api/songs/${id}/reference/youtube`, payload: { url, ...extra } });
 }
 
 beforeEach(() => {
@@ -30,7 +30,7 @@ describe("POST /api/songs/:id/reference/youtube", () => {
     let finish!: () => void;
     vi.mocked(workerClient.extractFromYoutube).mockReturnValue(
       new Promise((resolve) => {
-        finish = () => resolve(melody.track);
+        finish = () => resolve(extraction(melody.track));
       }),
     );
 
@@ -43,7 +43,7 @@ describe("POST /api/songs/:id/reference/youtube", () => {
     expect(stored.referenceStatus).toBe("PROCESSING");
     expect(stored.youtubeVideoId).toBe(VIDEO_ID);
     // Só o videoId vai para o worker, nunca a URL colada (regra 11).
-    expect(workerClient.extractFromYoutube).toHaveBeenCalledWith(VIDEO_ID);
+    expect(workerClient.extractFromYoutube).toHaveBeenCalledWith(VIDEO_ID, KNOWN_LYRICS);
 
     finish();
     await waitForReferenceStatus(song.id, "READY");
@@ -51,7 +51,7 @@ describe("POST /api/songs/:id/reference/youtube", () => {
 
   it("worker ok → READY mantendo o youtubeVideoId", async () => {
     const song = await seedSong();
-    vi.mocked(workerClient.extractFromYoutube).mockResolvedValue(melody.track);
+    vi.mocked(workerClient.extractFromYoutube).mockResolvedValue(extraction(melody.track));
 
     await fromYoutube(song.id);
 
@@ -63,13 +63,13 @@ describe("POST /api/songs/:id/reference/youtube", () => {
 
   it("worker ok → letra alinhada ao áudio do vídeo (sdd-007)", async () => {
     const song = await seedSong({ lyrics: shiftLines(melody.lines, 1_500) });
-    vi.mocked(workerClient.extractFromYoutube).mockResolvedValue(melody.track);
+    vi.mocked(workerClient.extractFromYoutube).mockResolvedValue(extraction(melody.track));
 
     await fromYoutube(song.id);
 
     const stored = await waitForReferenceStatus(song.id, "READY");
     expect(stored.alignedLyrics).toEqual(melody.lines);
-    expect(stored.lyricsAlignment).toEqual({ aligned: true, shiftMs: -1_500, matchedRatio: 1 });
+    expect(stored.lyricsAlignment).toEqual({ aligned: true, shiftMs: -1_500, matchedRatio: 1, method: "onset" });
   });
 
   it.each<[WorkerClientErrorCode, string]>([
@@ -111,7 +111,7 @@ describe("POST /api/songs/:id/reference/youtube", () => {
   it("duração divergente → FAILED com DURATION_MISMATCH e referenceAudioMs", async () => {
     const song = await seedSong();
     const shorter = makeTrack(new Array<number | null>((SONG_MS - 20_000) / 10).fill(60));
-    vi.mocked(workerClient.extractFromYoutube).mockResolvedValue(shorter);
+    vi.mocked(workerClient.extractFromYoutube).mockResolvedValue(extraction(shorter));
 
     await fromYoutube(song.id);
 
@@ -167,8 +167,8 @@ describe("POST /api/songs/:id/reference/youtube", () => {
 
   it("concorrência com o upload → um 202 e um 409", async () => {
     const song = await seedSong();
-    vi.mocked(workerClient.extractFromYoutube).mockResolvedValue(melody.track);
-    vi.mocked(workerClient.extract).mockResolvedValue(melody.track);
+    vi.mocked(workerClient.extractFromYoutube).mockResolvedValue(extraction(melody.track));
+    vi.mocked(workerClient.extract).mockResolvedValue(extraction(melody.track));
 
     const responses = await Promise.all([
       fromYoutube(song.id),
@@ -181,5 +181,71 @@ describe("POST /api/songs/:id/reference/youtube", () => {
         vi.mocked(workerClient.extract).mock.calls.length,
     ).toBe(1);
     await waitForReferenceStatus(song.id, "READY");
+  });
+});
+
+// ─── Alinhamento forçado e redo (sdd-010) ────────────────────────────────────
+
+describe("POST /api/songs/:id/reference/youtube — sdd-010", () => {
+  it("worker devolve o alinhamento → letra alinhada pelo texto, method forced", async () => {
+    const song = await seedSong({ lyrics: shiftLines(melody.lines, 1_500) });
+    vi.mocked(workerClient.extractFromYoutube).mockResolvedValue(extraction(melody.track, forcedFrom(melody.lines)));
+
+    await fromYoutube(song.id);
+
+    const stored = await waitForReferenceStatus(song.id, "READY");
+    expect(stored.alignedLyrics).toEqual(melody.lines);
+    expect(stored.lyricsAlignment).toEqual({ aligned: true, shiftMs: -1_500, matchedRatio: 1, method: "forced" });
+  });
+
+  it("READY + redo → 202, PROCESSING com o novo videoId e o alinhamento zerado", async () => {
+    const song = await seedReadySong({ youtubeVideoId: "aaaaaaaaaaa" });
+    let finish!: () => void;
+    vi.mocked(workerClient.extractFromYoutube).mockReturnValue(
+      new Promise((resolve) => {
+        finish = () => resolve(extraction(melody.track, forcedFrom(melody.lines)));
+      }),
+    );
+
+    const response = await fromYoutube(song.id, URL, { redo: true });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toEqual({ status: "PROCESSING", youtubeVideoId: VIDEO_ID });
+    const claimed = await prisma.song.findUniqueOrThrow({ where: { id: song.id } });
+    expect(claimed.referenceStatus).toBe("PROCESSING");
+    expect(claimed.youtubeVideoId).toBe(VIDEO_ID);
+    expect(claimed.alignedLyrics).toBeNull();
+    expect(claimed.lyricsAlignment).toBeNull();
+    expect(workerClient.extractFromYoutube).toHaveBeenCalledWith(VIDEO_ID, KNOWN_LYRICS);
+
+    finish();
+    const stored = await waitForReferenceStatus(song.id, "READY");
+    expect(stored.lyricsAlignment).toMatchObject({ method: "forced" });
+  });
+
+  it("READY com redo false → 409", async () => {
+    const song = await seedReadySong();
+
+    const response = await fromYoutube(song.id, URL, { redo: false });
+
+    expect(response.statusCode).toBe(409);
+    expect(workerClient.extractFromYoutube).not.toHaveBeenCalled();
+  });
+
+  it("PROCESSING recente + redo → 409", async () => {
+    const song = await seedSong({ referenceStatus: "PROCESSING", referenceUpdatedAt: new Date() });
+
+    const response = await fromYoutube(song.id, URL, { redo: true });
+
+    expect(response.statusCode).toBe(409);
+    expect(workerClient.extractFromYoutube).not.toHaveBeenCalled();
+  });
+
+  it("redo que não é booleano → 400", async () => {
+    const song = await seedReadySong();
+
+    const response = await fromYoutube(song.id, URL, { redo: "true" });
+
+    expect(response.statusCode).toBe(400);
   });
 });

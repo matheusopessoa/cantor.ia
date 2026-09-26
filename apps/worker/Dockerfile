@@ -37,8 +37,11 @@ FROM base AS runtime
 COPY --from=deps /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:${PATH}"
 COPY app ./app
-# Baixa os pesos do htdemucs no build: o primeiro request não espera o download.
-RUN python -c "from app import separation, pitch; separation.load(); pitch.load()"
+# Baixa os pesos do htdemucs, do crepe, do MMS_FA (~1,2 GB, alinhamento da letra) e do Whisper
+# (~1,6 GB, transcrição da voz, sdd-011) no build: o primeiro request não espera o download.
+# O Whisper local continua na imagem mesmo com OPENAI_API_KEY (sdd-014): é a reserva quando a
+# OpenAI falha e não pode depender de rede. Com a chave, o boot não o carrega na RAM.
+RUN python -c "from app import separation, pitch, alignment, transcription; separation.load(); pitch.load(); alignment.load(); transcription.load()"
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s \
   CMD curl -fsS http://localhost:8000/health || exit 1

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { SongPrep } from "@/components/song-prep";
 import { ApiError } from "@/lib/api";
 import { serverApi } from "@/lib/api.server";
+import { DEFAULT_DIFFICULTY } from "@/lib/difficulty";
 import type { SongDto } from "@/lib/types";
 
 interface SongPageProps {
@@ -32,7 +33,9 @@ export async function generateMetadata({ params }: SongPageProps): Promise<Metad
 export default async function SongPage({ params }: SongPageProps) {
   const { id } = await params;
   const song = await loadSong(id);
-  const ranking = await serverApi.getRanking(id, 10);
+  // O nível escolhido fica no dispositivo, então o servidor só conhece o padrão; o
+  // componente busca o ranking de outro nível depois da hidratação (sdd-009).
+  const ranking = await serverApi.getRanking(id, 10, DEFAULT_DIFFICULTY);
 
   return <SongPrep song={song} ranking={ranking} />;
 }

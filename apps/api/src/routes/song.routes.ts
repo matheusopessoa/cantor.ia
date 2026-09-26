@@ -5,7 +5,10 @@ import {
   getReference,
   getSong,
   getSongAudio,
+  getYoutubeCandidates,
   searchSongs,
+  searchSongsByLyrics,
+  separateStems,
   setReferenceFromYoutube,
   uploadReference,
 } from "../controllers/song.controller.js";
@@ -15,6 +18,7 @@ const PERFORMANCE_BODY_LIMIT = 2 * 1024 * 1024;
 
 export async function songRoutes(app: FastifyInstance) {
   app.get("/search", searchSongs);
+  app.get("/search/lyrics", searchSongsByLyrics);
   app.post("/", createSong);
   app.get("/:id", getSong);
 
@@ -22,6 +26,8 @@ export async function songRoutes(app: FastifyInstance) {
   app.post("/:id/reference", uploadReference);
   app.get("/:id/reference", getReference);
   app.get("/:id/audio", getSongAudio);
+  app.post("/:id/stems", separateStems);
+  app.get("/:id/youtube-candidates", getYoutubeCandidates);
 
   app.post("/:id/performances", { bodyLimit: PERFORMANCE_BODY_LIMIT }, submitPerformance);
   app.get("/:id/performances", getRanking);

@@ -1,9 +1,9 @@
 {
   "name": "web",
-  "version": "0.3.0",
+  "version": "0.7.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "lsof -ti:5173 2>/dev/null | xargs kill -9 2>/dev/null; next dev -p 5173",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

@@ -55,6 +55,13 @@ describe("envSchema", () => {
     ]);
   });
 
+  it("LYRICS_REVIEW_SECRET é opcional, mas quando vem precisa de 32 caracteres; vazia conta como ausente", () => {
+    expect(envSchema.safeParse(validEnv).data?.LYRICS_REVIEW_SECRET).toBeUndefined();
+    expect(envSchema.safeParse({ ...validEnv, LYRICS_REVIEW_SECRET: "" }).data?.LYRICS_REVIEW_SECRET).toBeUndefined();
+    expect(envSchema.safeParse({ ...validEnv, LYRICS_REVIEW_SECRET: "c".repeat(32) }).data?.LYRICS_REVIEW_SECRET).toBe("c".repeat(32));
+    expect(issuePaths({ ...validEnv, LYRICS_REVIEW_SECRET: "curto" })).toEqual(["LYRICS_REVIEW_SECRET"]);
+  });
+
   it("exige CORS_ALLOWED_ORIGINS em prod", () => {
     expect(issuePaths({ ...validEnv, NODE_ENV: "prod" })).toEqual(["CORS_ALLOWED_ORIGINS"]);
   });

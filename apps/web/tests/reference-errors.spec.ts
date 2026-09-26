@@ -67,11 +67,27 @@ describe("referenceErrorCopy (tabela do design system)", () => {
     });
   });
 
+  it("SEARCH_FAILED (sdd-008)", () => {
+    expect(referenceErrorCopy("SEARCH_FAILED", ctx)).toEqual({
+      tone: "warning",
+      title: "Não achamos o vídeo sozinhos",
+      body: "Cole o link do YouTube ou envie o arquivo de áudio.",
+    });
+  });
+
   it("INTERNAL", () => {
     expect(referenceErrorCopy("INTERNAL", ctx)).toEqual({
       tone: "danger",
       title: "Deu ruim do nosso lado",
       body: "Tente de novo. Se continuar, envie o arquivo de áudio.",
+    });
+  });
+
+  it("INTERRUPTED (API reiniciou no meio, achado da sdd-011)", () => {
+    expect(referenceErrorCopy("INTERRUPTED", ctx)).toEqual({
+      tone: "warning",
+      title: "A preparação foi interrompida",
+      body: "O servidor reiniciou no meio. Tente de novo; leva uns 2 a 3 minutos.",
     });
   });
 

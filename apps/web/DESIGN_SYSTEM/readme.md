@@ -100,14 +100,16 @@ Texto escuro (`--text-on-neon`) sobre qualquer neon fica ≥ 5.7:1.
 |---|---|---|
 | Melodia original (referência) | `--pitch-reference` | ciano |
 | Sua voz | `--pitch-voice` | rosa |
-| Perfect (≤ 50 cents) / Good (≤ 100) / Miss | `--hit-perfect/good/miss` | verde / amarelo / vermelho |
+| Perfect / Good / Miss (limiares do nível: 50 / 100 cents no difícil, 100 / 200 no médio) | `--hit-perfect/good/miss` | verde / amarelo / vermelho |
+| On time / Miss (fácil: voz no lugar certo, sem afinação) | `--hit-perfect` / `--hit-miss` | verde / vermelho |
+| Medidores do resultado: afinação / tempo / ritmo | `.ct-meter--pitch/--timing/--rhythm` | ciano / rosa / verde |
 | Conceito S / A / B / C / D | `--grade-s…d` | amarelo / verde / azul / laranja / vermelho |
 | Faixa do conceito | S ≥ 9.0 · A ≥ 7.0 · B ≥ 5.0 · C ≥ 3.0 · D < 3.0 | |
 | 1º / 2º / 3º lugar | `--rank-1/2/3` | amarelo / ciano / laranja |
 | Letra cantada / não cantada | `--lyric-sung/unsung` | ciano / lilás claro |
 
-Nunca comunique algo **só** pela cor: acerto também vem escrito (PERFECT/GOOD/MISS),
-conceito é uma letra e o ranking tem a posição escrita.
+Nunca comunique algo **só** pela cor: acerto também vem escrito (PERFECT/GOOD/MISS, e
+ON TIME/MISS no fácil), conceito é uma letra e o ranking tem a posição escrita.
 
 ## Tipografia
 
@@ -152,7 +154,8 @@ Keyframes disponíveis: `ct-flicker`, `ct-blink`, `ct-pop`, `ct-beat`, `ct-chase
   curvas de pitch vai dentro de `.ct-highway__lane`, e `.ct-highway__hitline` pulsa no beat.
 - **Placar (`.ct-score`, `.ct-grade`, `.ct-meter`)**: nota em Press Start, conceito inclinado
   em -6° e medidores de LED de 10 segmentos (`--value` 0–1). O `.ct-meter__bar` leva
-  `role="meter"` com `aria-valuenow`.
+  `role="meter"` com `aria-valuenow`. Os medidores são os do nível: `--pitch` e `--timing`
+  no médio e no difícil; `--timing` e `--rhythm` no fácil (que não mede afinação).
 - **Ranking (`.ct-ranking` dentro de `.ct-marquee`)**: tabela HIGH SCORES com pódio colorido e
   a sua linha (`tr.is-you`) com seta piscando.
 
@@ -160,14 +163,14 @@ Keyframes disponíveis: `ct-flicker`, `ct-blink`, `ct-pop`, `ct-beat`, `ct-chase
 
 | Tela / estado | Componentes |
 |---|---|
-| Home / busca | `.ct-horizon` + `.ct-wordmark--hero`, `.ct-search`, lista de `.ct-song-row` (capa = miniatura do YouTube quando houver `youtubeVideoId`, senão a inicial sobre `--grad-sunset`) + `.ct-badge` de status |
-| Preparar música, sem referência | `.ct-tabs` "Link do YouTube \| Enviar arquivo" → `.ct-input-group` (link + "Usar vídeo") ou `.ct-dropzone`; link "Procurar no YouTube" na dica |
+| Home / busca | `.ct-horizon` + `.ct-wordmark--hero`, `.ct-tabs` "Pela letra \| Pelo vídeo" (padrão: pela letra; sdd-015), `.ct-search` com a dica do modo, lista de `.ct-song-row` (capa = miniatura do YouTube quando houver `youtubeVideoId`, senão a inicial sobre `--grad-sunset`) + `.ct-badge` de status. Pela letra sem resultado ou com erro: `.ct-btn--secondary` "Procurar pelo vídeo" (troca a aba com o mesmo texto); com resultados, o mesmo em `.ct-btn--ghost.ct-btn--sm` abaixo da lista. Nenhum `--primary` na busca |
+| Preparar música, sem referência | Enquanto busca, `.ct-label` "Procurando o áudio oficial…". Com sugestão de confiança alta/média (sdd-008): o melhor candidato numa `.ct-tv` (miniatura `hqdefault.jpg`, título, canal, duração, visualizações, selos `.ct-badge` "Áudio oficial" / "Canal do artista" / "Lyric video" / "Oficial" / "Mais visto" / "Duração exata") com o único `.ct-btn--primary` "Usar este vídeo", até 4 alternativas como `.ct-song-row` (miniatura `default.jpg`, "Usar" em `.ct-btn--secondary.ct-btn--sm`), e abaixo o painel "Outro vídeo ou arquivo" com as `.ct-tabs` "Link do YouTube \| Enviar arquivo" → `.ct-input-group` (link + "Usar vídeo" em `--secondary`) ou `.ct-dropzone`. Confiança baixa: o painel manual vem primeiro (com o `--primary`) e os candidatos viram a lista "Talvez seja um destes". Sem candidatos ou com `SEARCH_FAILED` (`.ct-alert--warning`): só o painel manual; link "Procurar no YouTube" na dica |
 | Preparar música, processando | `.ct-tv` com a miniatura do vídeo + `.ct-loading` (tempo decorrido; nunca porcentagem falsa) + `.ct-name-entry` para adiantar o nome |
 | Preparar música, falhou | `.ct-alert--danger` ou `--warning` com a mensagem do código de erro (tabela abaixo) e as abas de volta |
-| Preparar música, pronta | `.ct-alert--success` "Letra alinhada ao áudio (+3,2 s)" ou `.ct-alert--warning` "Não conseguimos alinhar a letra" (resultado de `lyricsAlignment`), `.ct-name-entry`, ranking (`.ct-marquee` + `.ct-ranking`), `.ct-btn--start` |
+| Preparar música, pronta | Quando a letra veio da transcrição da voz (`lyricsSelection.source = "whisper"`), um `.ct-alert--warning` "Letra gerada automaticamente" ou, com `reviewedAt` (revisada pelo Claude Code via MCP, sdd-012), "Letra gerada automaticamente e revisada" (`lib/lyrics-source.ts`); depois `.ct-alert--success` "Letra alinhada ao áudio" (sem o deslocamento: ele já está na letra e confundia com o ajuste fino da tela de cantar; corpo diz se foi verso a verso, `method: "forced"`, ou pelas entradas da voz) ou `.ct-alert--warning` "Não conseguimos alinhar a letra" (resultado de `lyricsAlignment`), `.ct-tabs` "Fácil \| Médio \| Difícil" (nível, memorizado no dispositivo; padrão Médio) com a descrição do escolhido na dica, `.ct-name-entry`, ranking do nível (`.ct-marquee` + `.ct-ranking`, nível no título), `.ct-btn--start` e, abaixo dele, `.ct-btn--ghost.ct-btn--sm` "Refazer melodia e letra" com a dica do que acontece (só um `--primary` na tela). Por YouTube o clique reenvia o mesmo vídeo; por arquivo reabre as abas de fonte |
 | Baixando o áudio para cantar | `.ct-progress` com `--value` real (`Content-Length`). Sem tamanho conhecido, use `.ct-loading` |
-| Karaokê | `.ct-stage.ct-crt` → `.ct-hud` + `.ct-progress`, `.ct-highway` (canvas), `.ct-lyrics`, `.ct-countdown`, `.ct-range` do ajuste fino da letra (a letra já vem alinhada pela API) |
-| Resultado | `.ct-score`, `.ct-grade`, `.ct-meter--pitch/--timing`, `.ct-badge--new-record`, ranking com `tr.is-you` |
+| Karaokê | `.ct-stage.ct-crt` → `.ct-hud` + `.ct-progress`, `.ct-highway` (canvas), `.ct-lyrics`, `.ct-countdown`, `.ct-range` do ajuste fino da letra (a letra já vem alinhada pela API; fora de 0, um `.ct-btn--ghost.ct-btn--sm` "Zerar" ao lado do rótulo e a dica avisa que a nota cobra o verso deslocado), `.ct-range` "Voz do cantor" (0–100 %, `disabled` com a explicação na `.ct-field__hint` enquanto as trilhas não existem; enquanto o worker separa, um `.ct-loading` "Preparando a voz do cantor" dentro do `.ct-field`; no palco, a rodada que toca o original mantém o slider desabilitado). O HUD mostra "Afinação" com PERFECT/GOOD/MISS nos limiares do nível (médio e difícil) ou "Ritmo" com ON TIME/MISS (fácil); no fácil o canvas mostra presença de voz em barras, não curvas de afinação |
+| Resultado | `.ct-score` com o nível no rótulo, `.ct-grade`, `.ct-meter--pitch/--timing` (médio e difícil) ou `.ct-meter--timing/--rhythm` (fácil), `.ct-badge--new-record`, ranking do nível com `tr.is-you` |
 
 A miniatura vem de `https://i.ytimg.com/vi/<videoId>/hqdefault.jpg` (`default.jpg` na linha da
 busca), com `alt` descritivo na TV e `alt=""` na capa da linha (é decorativa, porque o título
@@ -188,6 +191,8 @@ código cru.
 | `DOWNLOAD_FAILED` | danger | O YouTube não deixou baixar | Tente de novo em alguns minutos ou envie o arquivo de áudio. |
 | `INVALID_AUDIO` | danger | Não conseguimos ler esse arquivo | Envie um MP3, M4A, WAV, OGG ou FLAC de até 20 MB. |
 | `INTERNAL` | danger | Deu ruim do nosso lado | Tente de novo. Se continuar, envie o arquivo de áudio. |
+| `INTERRUPTED` | warning | A preparação foi interrompida | O servidor reiniciou no meio. Tente de novo; leva uns 2 a 3 minutos. |
+| `SEARCH_FAILED` | warning | Não achamos o vídeo sozinhos | Cole o link do YouTube ou envie o arquivo de áudio. |
 
 ## Voz e texto
 
@@ -200,6 +205,9 @@ inglês (PRESS START, HIGH SCORE, PERFECT, 1ST) aparecem **só no HUD**, como no
 
 - ✅ "Coloque o fone e aperte START." · "Novo recorde. Seu nome está no topo." ·
   "Quase lá. Faltou entrar no tempo em 3 versos."
+- Níveis (sdd-009), sempre com esta copy: "Fácil: só letra no tempo e ritmo, sem afinação" ·
+  "Médio: afinação com folga de um semitom" · "Difícil: afinação de meio semitom". O nome do
+  nível aparece no ranking ("High scores · Médio") e no resultado ("Sua nota · Médio").
 - ❌ Mensagem técnica ("Erro 409…") · humilhar quem cantou mal · emoji como ícone · mais de
   uma exclamação por tela.
 

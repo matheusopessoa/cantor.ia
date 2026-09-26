@@ -4,15 +4,25 @@ Monorepo pnpm com:
 
 - [`apps/api`](apps/api) — API em Fastify + Prisma (Postgres), validação com Zod, testes com Vitest.
 - [`apps/web`](apps/web) — frontend em Next.js 16 (App Router) + React 19 + Tailwind CSS 4.
+- [`apps/worker`](apps/worker) — serviço Python (FastAPI + `uv`, fora do pnpm) que extrai a melodia da voz, escolhe e alinha a letra.
+- [`apps/mcp`](apps/mcp) — servidor MCP (stdio) para o Claude Code revisar a letra das músicas pela API (registrado no `.mcp.json`).
 
 ## Começando
 
 ```bash
 pnpm install
 pnpm env:init                                    # cria o .env da raiz e gera os segredos
+pnpm dev                                         # sobe tudo: Postgres (Docker), API :3333, web :5173 e worker :8000
+```
+
+`pnpm dev` mata processos presos nessas portas antes de subir; Ctrl+C derruba os serviços e
+`pnpm dev:stop` também para o banco. `pnpm dev --no-worker` pula o worker. Para subir cada
+peça separadamente:
+
+```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db   # Postgres de dev (porta 5432)
 pnpm --filter api dev                            # API em http://localhost:3333
-pnpm --filter web dev                            # Web em http://localhost:3000
+pnpm --filter web dev                            # Web em http://localhost:5173
 ```
 
 Todas as variáveis de ambiente ficam num único `.env` na raiz. O catálogo, com o que cada uma

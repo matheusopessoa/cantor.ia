@@ -11,7 +11,7 @@ export async function submitPerformance(request: FastifyRequest, reply: FastifyR
 
 export async function getRanking(request: FastifyRequest, reply: FastifyReply) {
   const { id } = songParamsSchema.parse(request.params);
-  const { limit } = rankingQuerySchema.parse(request.query);
-  const ranking = await performanceService.ranking(id, limit);
+  const { limit, difficulty } = rankingQuerySchema.parse(request.query);
+  const ranking = await performanceService.ranking(id, difficulty, limit);
   return reply.status(200).send(ranking);
 }

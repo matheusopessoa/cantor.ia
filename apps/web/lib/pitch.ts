@@ -1,4 +1,4 @@
-import type { PitchTrack } from "./types";
+import type { Difficulty, PitchTrack } from "./types";
 
 /** Mesmos limites de `pitchTrackSchema` (`apps/api/src/utils/validators.ts`). */
 export const HOP_MS = 10;
@@ -13,11 +13,31 @@ export const MIN_CLARITY = 0.9;
 /** Abaixo deste RMS o bloco é silêncio (evita "pitch" de ruído de fundo). */
 export const RMS_GATE = 0.01;
 
-/** Limiares de acerto em cents, iguais aos da nota (sdd-002). */
-export const PERFECT_CENTS = 50;
-export const GOOD_CENTS = 100;
+export interface HitThresholds {
+  /** Erro até aqui (cents) é PERFECT. */
+  perfectCents: number;
+  /** Erro até aqui é GOOD; acima, MISS. */
+  goodCents: number;
+}
+
+/**
+ * Limiares de PERFECT/GOOD por nível, iguais aos da nota (`SCORING_CONFIG.levels` na API,
+ * sdd-009): o feedback nunca é mais rigoroso que a nota. No fácil a afinação não conta; os
+ * limiares existem só para o caso de alguém medir cents nele.
+ */
+export const DIFFICULTY_THRESHOLDS: Record<Difficulty, HitThresholds> = {
+  HARD: { perfectCents: 50, goodCents: 100 },
+  MEDIUM: { perfectCents: 100, goodCents: 200 },
+  EASY: { perfectCents: 100, goodCents: 200 },
+};
 
 export type Hit = "perfect" | "good" | "miss";
+
+/** Feedback de ritmo do fácil (sdd-009): voz no lugar certo ou não. */
+export type PresenceHit = "ontime" | "miss";
+
+/** F1 mínimo entre a presença cantada e a da referência numa janela para valer ON TIME. */
+export const ON_TIME_MIN_F1 = 0.7;
 
 /** Frequência em Hz → nota MIDI fracionária (69 = A4 = 440 Hz). */
 export function hzToMidi(hz: number): number {
@@ -42,10 +62,10 @@ export function centsFromReference(sung: number, ref: number): number {
   return (foldToReference(sung, ref) - ref) * 100;
 }
 
-export function hitForCents(cents: number): Hit {
+export function hitForCents(cents: number, thresholds: HitThresholds): Hit {
   const abs = Math.abs(cents);
-  if (abs <= PERFECT_CENTS) return "perfect";
-  if (abs <= GOOD_CENTS) return "good";
+  if (abs <= thresholds.perfectCents) return "perfect";
+  if (abs <= thresholds.goodCents) return "good";
   return "miss";
 }
 
@@ -84,14 +104,16 @@ export function framesToTrack(frames: readonly (number | null)[], durationMs: nu
 /**
  * Erro médio (cents) da voz contra a referência em [from, to). Devolve `null` quando a
  * referência não tem voz no trecho; frames em que a pessoa não cantou contam como erro
- * máximo (MISS), como na nota oficial.
+ * máximo (o dobro do limiar de GOOD do nível, sempre MISS), como na nota oficial.
  */
 export function meanCentsError(
   reference: readonly (number | null)[],
   voice: readonly (number | null)[],
   from: number,
   to: number,
+  thresholds: HitThresholds,
 ): number | null {
+  const silentCents = thresholds.goodCents * 2;
   let total = 0;
   let count = 0;
 
@@ -99,9 +121,43 @@ export function meanCentsError(
     const ref = reference[i];
     if (ref === null || ref === undefined) continue;
     const sung = voice[i];
-    total += sung === null || sung === undefined ? GOOD_CENTS * 2 : Math.abs(centsFromReference(sung, ref));
+    total += sung === null || sung === undefined ? silentCents : Math.abs(centsFromReference(sung, ref));
     count++;
   }
 
   return count === 0 ? null : total / count;
+}
+
+/**
+ * Feedback de ritmo do fácil numa janela de frames [from, to): `"ontime"` quando a presença
+ * de voz cantada coincide com a da referência (F1 ≥ `ON_TIME_MIN_F1`), `"miss"` senão
+ * (faltou voz ou sobrou voz); `null` se nenhuma das duas tem voz no trecho. Não olha o tom.
+ */
+export function presenceHit(
+  reference: readonly (number | null)[],
+  voice: readonly (number | null)[],
+  from: number,
+  to: number,
+): PresenceHit | null {
+  let referenceVoiced = 0;
+  let sungVoiced = 0;
+  let both = 0;
+
+  for (let i = Math.max(0, from); i < to; i++) {
+    const ref = reference[i];
+    const sung = voice[i];
+    const hasRef = ref !== null && ref !== undefined;
+    const hasSung = sung !== null && sung !== undefined;
+    if (hasRef) referenceVoiced++;
+    if (hasSung) sungVoiced++;
+    if (hasRef && hasSung) both++;
+  }
+
+  if (referenceVoiced === 0 && sungVoiced === 0) return null;
+  if (both === 0) return "miss";
+
+  const precision = both / sungVoiced;
+  const recall = both / referenceVoiced;
+  const f1 = (2 * precision * recall) / (precision + recall);
+  return f1 >= ON_TIME_MIN_F1 ? "ontime" : "miss";
 }

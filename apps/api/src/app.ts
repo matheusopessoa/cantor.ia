@@ -2,6 +2,7 @@ import fastify from "fastify";
 import { healthRoutes } from "./routes/health.routes.js";
 import { authRoutes } from "./routes/auth.routes.js";
 import { songRoutes } from "./routes/song.routes.js";
+import { reviewRoutes } from "./routes/review.routes.js";
 import { errorHandler } from "./utils/error-handler.js";
 import fastifyJwt from "@fastify/jwt";
 import cors from "@fastify/cors";
@@ -30,3 +31,4 @@ app.setErrorHandler(errorHandler);
 app.register(healthRoutes, { prefix: "/api" }); // HEALTH
 app.register(authRoutes, { prefix: "/api/auth" }); // AUTH
 app.register(songRoutes, { prefix: "/api/songs" }); // SONGS + PERFORMANCES
+app.register(reviewRoutes, { prefix: "/api/review" }); // REVISÃO DA LETRA (MCP, token de serviço)

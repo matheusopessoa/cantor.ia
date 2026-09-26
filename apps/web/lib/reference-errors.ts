@@ -9,10 +9,10 @@ export interface ErrorCopy {
   body: string;
 }
 
-export type ReferenceErrorInput = ReferenceErrorCode | "INVALID_YOUTUBE_URL";
+export type ReferenceErrorInput = ReferenceErrorCode | "INVALID_YOUTUBE_URL" | "SEARCH_FAILED";
 
 export interface ReferenceErrorContext {
-  /** Duração da letra (LRCLIB). */
+  /** Duração da música (da letra do LRCLIB nas antigas, do YouTube Music nas novas). */
   songMs: number;
   /** Duração do áudio da tentativa (`referenceAudioMs`), quando a API informou. */
   audioMs: number | null;
@@ -20,6 +20,7 @@ export interface ReferenceErrorContext {
 
 const KNOWN_CODES: ReadonlySet<string> = new Set<ReferenceErrorInput>([
   "INVALID_YOUTUBE_URL",
+  "SEARCH_FAILED",
   "VIDEO_UNAVAILABLE",
   "TOO_LONG",
   "DURATION_MISMATCH",
@@ -27,6 +28,7 @@ const KNOWN_CODES: ReadonlySet<string> = new Set<ReferenceErrorInput>([
   "DOWNLOAD_FAILED",
   "INVALID_AUDIO",
   "INTERNAL",
+  "INTERRUPTED",
 ]);
 
 /**
@@ -80,6 +82,18 @@ export function referenceErrorCopy(code: string, ctx: ReferenceErrorContext): Er
         tone: "danger",
         title: "Não conseguimos ler esse arquivo",
         body: "Envie um MP3, M4A, WAV, OGG ou FLAC de até 20 MB.",
+      };
+    case "INTERRUPTED":
+      return {
+        tone: "warning",
+        title: "A preparação foi interrompida",
+        body: "O servidor reiniciou no meio. Tente de novo; leva uns 2 a 3 minutos.",
+      };
+    case "SEARCH_FAILED":
+      return {
+        tone: "warning",
+        title: "Não achamos o vídeo sozinhos",
+        body: "Cole o link do YouTube ou envie o arquivo de áudio.",
       };
     case "INTERNAL":
     default:

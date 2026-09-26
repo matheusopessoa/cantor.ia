@@ -1,0 +1,25 @@
+{
+  "name": "mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Servidor MCP do cantor.ia: revisão da letra das músicas pelo Claude Code (sdd-012)",
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "packageManager": "pnpm@10.24.0",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.1",
+    "dotenv": "^18.0.4",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.3",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  }
+}

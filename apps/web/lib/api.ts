@@ -1,5 +1,7 @@
 import { publicEnv } from "./env.public";
 import type {
+  Difficulty,
+  LyricsSearchItem,
   PerformanceBody,
   PerformanceResult,
   PitchTrack,
@@ -8,6 +10,7 @@ import type {
   SongDto,
   SongSearchItem,
   YoutubeReferenceStarted,
+  YoutubeSuggestion,
 } from "./types";
 
 /**
@@ -26,6 +29,11 @@ export class ApiError extends Error {
 }
 
 export type DownloadProgress = (loaded: number, total: number | null) => void;
+
+export interface ReferenceOptions {
+  /** Refaz melodia e letra de uma referência já pronta (sdd-010). Sem isso, `READY` responde 409. */
+  redo?: boolean;
+}
 
 async function toApiError(response: Response): Promise<ApiError> {
   let message = response.statusText || `HTTP ${response.status}`;
@@ -69,7 +77,19 @@ export function createApi(baseUrl: string) {
       return parseJson(response);
     },
 
-    async createSong(lrclibId: number): Promise<SongDto> {
+    /** Cadastra pelo vídeo escolhido na busca e já começa a preparar (sdd-011). */
+    async createSong(videoId: string): Promise<SongDto> {
+      return parseJson(await fetch(url("/"), json({ videoId })));
+    },
+
+    /** Busca pela letra no LRCLIB (sdd-015): só músicas com letra sincronizada. */
+    async searchLyrics(q: string): Promise<LyricsSearchItem[]> {
+      const response = await fetch(url(`/search/lyrics?q=${encodeURIComponent(q)}`), { cache: "no-store" });
+      return parseJson(response);
+    },
+
+    /** Cadastra pela letra (sdd-015). Não começa a preparar: o vídeo é escolhido na preparação. */
+    async createSongFromLyrics(lrclibId: number): Promise<SongDto> {
       return parseJson(await fetch(url("/"), json({ lrclibId })));
     },
 
@@ -78,14 +98,23 @@ export function createApi(baseUrl: string) {
       return parseJson(response);
     },
 
-    async setReferenceFromYoutube(id: string, youtubeUrl: string): Promise<YoutubeReferenceStarted> {
-      return parseJson(await fetch(url(`/${encodeURIComponent(id)}/reference/youtube`), json({ url: youtubeUrl })));
+    async setReferenceFromYoutube(id: string, youtubeUrl: string, { redo = false }: ReferenceOptions = {}): Promise<YoutubeReferenceStarted> {
+      const body = redo ? { url: youtubeUrl, redo: true } : { url: youtubeUrl };
+      return parseJson(await fetch(url(`/${encodeURIComponent(id)}/reference/youtube`), json(body)));
     },
 
-    async uploadReference(id: string, file: File): Promise<ReferenceStarted> {
+    async uploadReference(id: string, file: File, { redo = false }: ReferenceOptions = {}): Promise<ReferenceStarted> {
       const form = new FormData();
+      // Campos de texto ANTES do arquivo: é a única ordem em que a API os enxerga no multipart.
+      if (redo) form.append("redo", "true");
       form.append("file", file, file.name);
       return parseJson(await fetch(url(`/${encodeURIComponent(id)}/reference`), { method: "POST", body: form }));
+    },
+
+    /** Candidatos do YouTube ranqueados (sdd-008). `signal` cancela ao sair da página. */
+    async getYoutubeCandidates(id: string, signal?: AbortSignal): Promise<YoutubeSuggestion> {
+      const response = await fetch(url(`/${encodeURIComponent(id)}/youtube-candidates`), { cache: "no-store", signal });
+      return parseJson(response);
     },
 
     async getReference(id: string, signal?: AbortSignal): Promise<PitchTrack> {
@@ -128,12 +157,34 @@ export function createApi(baseUrl: string) {
       return new Blob(chunks as BlobPart[], { type: contentType });
     },
 
+    /**
+     * Voz e instrumental do áudio que o browser já tem (sdd-013). Manda o próprio áudio
+     * (multipart) e lê o `multipart/form-data` da API com `formData()`: dois arquivos, `vocals`
+     * e `instrumental`. Leva 1–2 min (Demucs em CPU); `signal` cancela ao sair da página.
+     */
+    async separateStems(id: string, audio: Blob, signal?: AbortSignal): Promise<{ vocals: Blob; instrumental: Blob }> {
+      const form = new FormData();
+      form.append("file", audio, "musica");
+      const response = await fetch(url(`/${encodeURIComponent(id)}/stems`), { method: "POST", body: form, signal });
+      if (!response.ok) throw await toApiError(response);
+
+      const parts = await response.formData();
+      const vocals = parts.get("vocals");
+      const instrumental = parts.get("instrumental");
+      if (!(vocals instanceof Blob) || !(instrumental instanceof Blob) || vocals.size === 0 || instrumental.size === 0) {
+        throw new ApiError(response.status, "Stems response without vocals and instrumental files");
+      }
+      return { vocals, instrumental };
+    },
+
     async submitPerformance(id: string, body: PerformanceBody): Promise<PerformanceResult> {
       return parseJson(await fetch(url(`/${encodeURIComponent(id)}/performances`), json(body)));
     },
 
-    async getRanking(id: string, limit = 10): Promise<RankingItem[]> {
-      const response = await fetch(url(`/${encodeURIComponent(id)}/performances?limit=${limit}`), {
+    /** Ranking de um nível (sdd-009). O nível é sempre explícito: o padrão da API (`HARD`) não é o do web. */
+    async getRanking(id: string, limit: number, difficulty: Difficulty): Promise<RankingItem[]> {
+      const query = `limit=${limit}&difficulty=${difficulty}`;
+      const response = await fetch(url(`/${encodeURIComponent(id)}/performances?${query}`), {
         cache: "no-store",
       });
       return parseJson(response);

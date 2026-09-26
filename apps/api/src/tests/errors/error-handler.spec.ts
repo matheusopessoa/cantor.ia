@@ -1,7 +1,7 @@
 import fastify from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { errorHandler } from "../../utils/error-handler.js";
-import { AppError } from "../../utils/errors.js";
+import { AppError, LyricsProviderUnavailableError, SongWithoutSyncedLyricsError, YoutubeSearchUnavailableError } from "../../utils/errors.js";
 
 const server = fastify({ logger: false });
 
@@ -11,6 +11,15 @@ server.get("/with-code", async () => {
 });
 server.get("/without-code", async () => {
   throw new AppError("Sem código", 409);
+});
+server.get("/search-failed", async () => {
+  throw new YoutubeSearchUnavailableError();
+});
+server.get("/lyrics-unavailable", async () => {
+  throw new LyricsProviderUnavailableError();
+});
+server.get("/no-synced", async () => {
+  throw new SongWithoutSyncedLyricsError(77);
 });
 server.get("/boom", async () => {
   throw new Error("inesperado");
@@ -33,6 +42,27 @@ describe("errorHandler", () => {
 
     expect(response.statusCode).toBe(409);
     expect(response.json()).toEqual({ message: "Sem código" });
+  });
+
+  it("YoutubeSearchUnavailableError responde 502 { message, code: SEARCH_FAILED } (sdd-008)", async () => {
+    const response = await server.inject({ method: "GET", url: "/search-failed" });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({ message: "YouTube search is unavailable", code: "SEARCH_FAILED" });
+  });
+
+  it("LyricsProviderUnavailableError responde 502 com code LYRICS_UNAVAILABLE (sdd-015)", async () => {
+    const response = await server.inject({ method: "GET", url: "/lyrics-unavailable" });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json()).toEqual({ message: "Lyrics provider is unavailable", code: "LYRICS_UNAVAILABLE" });
+  });
+
+  it("SongWithoutSyncedLyricsError responde 422 com code NO_SYNCED_LYRICS (sdd-015)", async () => {
+    const response = await server.inject({ method: "GET", url: "/no-synced" });
+
+    expect(response.statusCode).toBe(422);
+    expect(response.json().code).toBe("NO_SYNCED_LYRICS");
   });
 
   it("corpo acima do bodyLimit responde 413, não 500", async () => {

@@ -81,6 +81,29 @@ describe("findOnset", () => {
     expect(findOnset(track, 0, 99, 5)).toBe(30);
   });
 
+  it("com nearFrame devolve o onset mais próximo do alvo, não o primeiro", () => {
+    const track = withVoice(70, 90, withVoice(30, 40));
+    expect(findOnset(track, 0, 99, 5, 65)).toBe(70);
+    expect(findOnset(track, 0, 99, 5, 45)).toBe(30);
+    expect(findOnset(track, 0, 99, 5, 30)).toBe(30);
+  });
+
+  it("com nearFrame, empate fica com o onset anterior", () => {
+    const track = withVoice(70, 90, withVoice(30, 40));
+    expect(findOnset(track, 0, 99, 5, 50)).toBe(30);
+  });
+
+  it("com nearFrame fora da janela ainda escolhe o onset mais próximo dentro dela", () => {
+    const track = withVoice(70, 90, withVoice(30, 40));
+    expect(findOnset(track, 0, 60, 5, 200)).toBe(30);
+    expect(findOnset(track, 60, 99, 5, -10)).toBe(70);
+  });
+
+  it("com nearFrame, sem onset na janela devolve null", () => {
+    expect(findOnset(silent, 0, 99, 5, 50)).toBeNull();
+    expect(findOnset(withVoice(10, 60), 30, 70, 5, 40)).toBeNull();
+  });
+
   it("tolera janela fora dos limites do track", () => {
     expect(findOnset(withVoice(2, 30), -50, 500, 5)).toBe(2);
     expect(findOnset(withVoice(2, 30), 200, 300, 5)).toBeNull();

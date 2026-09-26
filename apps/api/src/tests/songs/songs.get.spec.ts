@@ -35,11 +35,11 @@ describe("GET /api/songs/:id — alinhamento da letra (sdd-007)", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().alignedLyrics).toEqual(melody.lines);
-    expect(response.json().lyricsAlignment).toEqual({ aligned: true, shiftMs: -3_000, matchedRatio: 1 });
+    expect(response.json().lyricsAlignment).toEqual({ aligned: true, shiftMs: -3_000, matchedRatio: 1, method: "onset" });
 
     const stored = await prisma.song.findUniqueOrThrow({ where: { id: song.id } });
     expect(stored.alignedLyrics).toEqual(melody.lines);
-    expect(stored.lyricsAlignment).toEqual({ aligned: true, shiftMs: -3_000, matchedRatio: 1 });
+    expect(stored.lyricsAlignment).toEqual({ aligned: true, shiftMs: -3_000, matchedRatio: 1, method: "onset" });
   });
 
   it("segunda leitura não carrega a referência nem regrava", async () => {
@@ -84,5 +84,28 @@ describe("GET /api/songs/:id — alinhamento da letra (sdd-007)", () => {
 
     expect(response.json()).toMatchObject({ alignedLyrics: null, lyricsAlignment: null });
     expect(load).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/songs/:id — method do alinhamento (sdd-010)", () => {
+  it("devolve o method gravado, sem backfill", async () => {
+    const song = await seedReadySong({ lyricsAlignment: { aligned: true, shiftMs: -9_980, matchedRatio: 0.825, method: "forced" } });
+    const load = vi.spyOn(songRepository, "findWithReference");
+
+    const response = await get(song.id);
+
+    expect(response.json().lyricsAlignment).toEqual({ aligned: true, shiftMs: -9_980, matchedRatio: 0.825, method: "forced" });
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it("registro da sdd-007 (sem method) continua válido e não é reprocessado", async () => {
+    const legacy = { aligned: true, shiftMs: 80, matchedRatio: 0.563 };
+    const song = await seedReadySong({ lyricsAlignment: legacy });
+    const save = vi.spyOn(songRepository, "saveAlignment");
+
+    const response = await get(song.id);
+
+    expect(response.json().lyricsAlignment).toEqual(legacy);
+    expect(save).not.toHaveBeenCalled();
   });
 });

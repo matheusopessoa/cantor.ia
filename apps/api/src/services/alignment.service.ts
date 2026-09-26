@@ -1,9 +1,15 @@
-import { voicedSegments } from "../utils/pitch.js";
-import type { LyricLine, LyricsAlignment, PitchTrack } from "../utils/validators.js";
+import { median, voicedSegments } from "../utils/pitch.js";
+import type {
+  ForcedAlignment,
+  LyricLine,
+  LyricsAlignment,
+  LyricsAlignmentMethod,
+  PitchTrack,
+} from "../utils/validators.js";
 
 /**
- * Constantes do alinhamento da letra à referência. Tudo em ms sobre a grade de 10 ms do
- * `PitchTrack`. Algoritmo e critérios em `specs/sdd-007-lyrics-alignment/tasks.md` §3.
+ * Constantes do alinhamento pelas pausas da voz (sdd-007). Tudo em ms sobre a grade de 10 ms
+ * do `PitchTrack`. Algoritmo e critérios em `specs/sdd-007-lyrics-alignment/tasks.md` §3.
  */
 export const ALIGNMENT_CONFIG = {
   segment: {
@@ -33,69 +39,178 @@ export const ALIGNMENT_CONFIG = {
   },
 } as const;
 
+/**
+ * Aceite do alinhamento forçado devolvido pelo worker (sdd-010). Calibrado na etapa 0 com
+ * Pitty "Na Sua Estante", Marília "Infiel" e Tiago Iorc "Tempo Perdido"
+ * (`apps/worker/README.md`, "Alinhamento da letra").
+ */
+export const FORCED_CONFIG = {
+  /** Linha cuja média das probabilidades dos caracteres fica abaixo disto é recusada. */
+  minLineScore: 0.4,
+  /** Abaixo desta fração de linhas com texto aceitas, o alinhamento é recusado (`aligned: false`). */
+  minMatchedRatio: 0.5,
+  /** Distância mínima entre duas linhas consecutivas depois do alinhamento. */
+  minLineGapMs: 200,
+  /** Linha "cantada" por mais que isto absorveu áudio que não é dela (refrão a mais, solo). */
+  maxLineDurationMs: 20_000,
+} as const;
+
 export interface AlignmentResult extends LyricsAlignment {
+  method: LyricsAlignmentMethod;
   /** Letra alinhada, ou `null` quando `aligned` é `false`. */
   lines: LyricLine[] | null;
 }
 
-const NOT_ALIGNED: AlignmentResult = { aligned: false, shiftMs: 0, matchedRatio: 0, lines: null };
+function notAligned(method: LyricsAlignmentMethod): AlignmentResult {
+  return { aligned: false, shiftMs: 0, matchedRatio: 0, method, lines: null };
+}
 
 /**
  * Alinha a letra sincronizada (cronometrada em cima de outra gravação) ao áudio da referência.
  *
- * Função pura e determinística: mesma letra + mesma referência → mesmo resultado. Só desloca
- * as linhas — **nunca muda a velocidade da letra** (sem escala de andamento, decisão do usuário
- * em `specs/sdd-007-lyrics-alignment/tasks.md` §2). Passos:
+ * Função pura e determinística: mesma letra + mesma referência (+ mesmo alinhamento do
+ * worker) → mesmo resultado. Só desloca as linhas — **nunca muda a velocidade da letra**
+ * (sem escala de andamento, decisão do usuário em `specs/sdd-007-lyrics-alignment/tasks.md`
+ * §2). Dois caminhos:
  *
- * 1. trechos com voz → inícios de frase (onsets: trecho precedido de silêncio ≥ 350 ms);
- * 2. deslocamento global por varredura em ±12 s (maximiza a proximidade linha ↔ onset);
- * 3. cada linha com texto que tenha um onset livre a até 350 ms encaixa nele (um onset por
- *    linha); as demais ficam só com o deslocamento global;
- * 4. ordem crescente garantida (≥ 200 ms entre linhas) e limites do áudio respeitados.
+ * - **`forced`** (sdd-010): o worker alinhou o texto de cada linha sobre a voz isolada
+ *   (CTC, `apps/worker/app/alignment.py`). Cada linha com texto é aceita ou recusada pela
+ *   confiança (`score ≥ 0,4`) e pela duração (≤ 20 s); as aceitas vão para onde são
+ *   cantadas de fato, as recusadas e as instrumentais recebem o deslocamento da vizinha
+ *   aceita. `shiftMs` é a mediana de (alinhado − original), só para diagnóstico.
+ * - **`onset`** (sdd-007, fallback quando o worker não devolve alinhamento): inícios de
+ *   frase da referência (`voicedSegments` + silêncio ≥ 350 ms), deslocamento global por
+ *   varredura em ±12 s e encaixe de cada linha no início de frase livre a até 350 ms.
  *
- * Menos da metade das linhas com texto encaixadas → `aligned: false` e `lines: null`: um
- * deslocamento errado é pior que nenhum, então o consumidor volta para a letra original.
+ * Nos dois, menos da metade das linhas com texto aceitas/encaixadas → `aligned: false` e
+ * `lines: null`: um deslocamento errado é pior que nenhum, então o consumidor volta para a
+ * letra original.
  */
 export const alignmentService = {
-  align(lines: LyricLine[], reference: PitchTrack): AlignmentResult {
-    const { segment, shift, snap } = ALIGNMENT_CONFIG;
-
-    const onsets = phraseOnsets(reference, segment.mergeGapMs, segment.minSegmentMs, segment.minSilenceBeforeOnsetMs);
-    const textLines = lines.filter((line) => hasText(line));
-    if (textLines.length < shift.minLines || onsets.length < shift.minLines) return NOT_ALIGNED;
-
-    const shiftMs = bestShift(textLines, onsets, shift.searchRangeMs, shift.stepMs, shift.toleranceMs);
-
-    const used = new Array<boolean>(onsets.length).fill(false);
-    const aligned: LyricLine[] = [];
-    let matched = 0;
-    let previous: number | null = null;
-
-    for (const line of lines) {
-      let startMs = line.startMs + shiftMs;
-
-      if (hasText(line)) {
-        const index = nearestFreeOnset(onsets, used, startMs, snap.toleranceMs);
-        if (index !== null) {
-          used[index] = true;
-          startMs = onsets[index] ?? startMs;
-          matched++;
-        }
-      }
-
-      if (previous !== null) startMs = Math.max(startMs, previous + snap.minLineGapMs);
-      startMs = Math.min(reference.durationMs, Math.max(0, startMs));
-      previous = startMs;
-
-      aligned.push({ startMs, text: line.text });
-    }
-
-    const matchedRatio = round3(matched / textLines.length);
-    const isAligned = matchedRatio >= shift.minMatchedRatio;
-
-    return { aligned: isAligned, shiftMs, matchedRatio, lines: isAligned ? aligned : null };
+  align(lines: LyricLine[], reference: PitchTrack, forced?: ForcedAlignment | null): AlignmentResult {
+    // Tamanho diferente é bug entre API e worker: degrada para o método por pausas.
+    if (forced && forced.lines.length === lines.length) return alignForced(lines, reference, forced);
+    return alignByOnsets(lines, reference);
   },
 };
+
+// ─── Caminho forçado (sdd-010) ───────────────────────────────────────────────
+
+function alignForced(lines: LyricLine[], reference: PitchTrack, forced: ForcedAlignment): AlignmentResult {
+  const { minLineScore, minMatchedRatio, minLineGapMs, maxLineDurationMs } = FORCED_CONFIG;
+
+  const textCount = lines.filter((line) => hasText(line)).length;
+  if (textCount === 0) return notAligned("forced");
+
+  // Instante aceito por linha (`null` = recusada, instrumental ou não alinhada).
+  const accepted: (number | null)[] = lines.map((line, index) => {
+    const result = forced.lines[index];
+    if (!hasText(line) || result === undefined) return null;
+    if (result.startMs === null || result.endMs === null || result.score === null) return null;
+    if (result.score < minLineScore || result.endMs - result.startMs > maxLineDurationMs) return null;
+    return result.startMs;
+  });
+
+  const deltas: number[] = [];
+  accepted.forEach((startMs, index) => {
+    if (startMs !== null) deltas.push(startMs - (lines[index]?.startMs ?? 0));
+  });
+
+  const matchedRatio = round3(deltas.length / textCount);
+  const shiftMs = deltas.length > 0 ? Math.round(median(deltas)) : 0;
+  if (matchedRatio < minMatchedRatio) return { aligned: false, shiftMs, matchedRatio, method: "forced", lines: null };
+
+  // Próxima linha aceita a partir de cada índice (para as recusadas do começo e para não
+  // empurrar uma aceita com as recusadas que vêm antes dela).
+  const nextAccepted: (number | null)[] = new Array<number | null>(lines.length).fill(null);
+  for (let i = lines.length - 1, next: number | null = null; i >= 0; i--) {
+    nextAccepted[i] = next;
+    if (accepted[i] !== null) next = i;
+  }
+
+  const aligned: LyricLine[] = [];
+  let previousAccepted: number | null = null;
+  let previous: number | null = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === undefined) continue;
+    const own = accepted[i] ?? null;
+    let startMs: number;
+
+    if (own !== null) {
+      startMs = own;
+      previousAccepted = i;
+    } else {
+      // Deslocamento da vizinha aceita anterior (ou da próxima, no começo da música), sem
+      // sair do intervalo entre as duas aceitas vizinhas.
+      const neighbor = previousAccepted ?? nextAccepted[i] ?? null;
+      const neighborStart = neighbor === null ? null : (accepted[neighbor] ?? null);
+      const neighborLine = neighbor === null ? undefined : lines[neighbor];
+      const delta = neighborStart === null || neighborLine === undefined ? shiftMs : neighborStart - neighborLine.startMs;
+      startMs = line.startMs + delta;
+
+      const before = previousAccepted === null ? null : (accepted[previousAccepted] ?? null);
+      if (before !== null && previousAccepted !== null) {
+        startMs = Math.max(startMs, before + minLineGapMs * (i - previousAccepted));
+      }
+      const afterIndex = nextAccepted[i] ?? null;
+      const after = afterIndex === null ? null : (accepted[afterIndex] ?? null);
+      if (after !== null && afterIndex !== null) {
+        startMs = Math.min(startMs, after - minLineGapMs * (afterIndex - i));
+      }
+    }
+
+    if (previous !== null) startMs = Math.max(startMs, previous + minLineGapMs);
+    startMs = Math.min(reference.durationMs, Math.max(0, startMs));
+    previous = startMs;
+
+    aligned.push({ startMs, text: line.text });
+  }
+
+  return { aligned: true, shiftMs, matchedRatio, method: "forced", lines: aligned };
+}
+
+// ─── Caminho pelas pausas da voz (sdd-007) ───────────────────────────────────
+
+function alignByOnsets(lines: LyricLine[], reference: PitchTrack): AlignmentResult {
+  const { segment, shift, snap } = ALIGNMENT_CONFIG;
+
+  const onsets = phraseOnsets(reference, segment.mergeGapMs, segment.minSegmentMs, segment.minSilenceBeforeOnsetMs);
+  const textLines = lines.filter((line) => hasText(line));
+  if (textLines.length < shift.minLines || onsets.length < shift.minLines) return notAligned("onset");
+
+  const shiftMs = bestShift(textLines, onsets, shift.searchRangeMs, shift.stepMs, shift.toleranceMs);
+
+  const used = new Array<boolean>(onsets.length).fill(false);
+  const aligned: LyricLine[] = [];
+  let matched = 0;
+  let previous: number | null = null;
+
+  for (const line of lines) {
+    let startMs = line.startMs + shiftMs;
+
+    if (hasText(line)) {
+      const index = nearestFreeOnset(onsets, used, startMs, snap.toleranceMs);
+      if (index !== null) {
+        used[index] = true;
+        startMs = onsets[index] ?? startMs;
+        matched++;
+      }
+    }
+
+    if (previous !== null) startMs = Math.max(startMs, previous + snap.minLineGapMs);
+    startMs = Math.min(reference.durationMs, Math.max(0, startMs));
+    previous = startMs;
+
+    aligned.push({ startMs, text: line.text });
+  }
+
+  const matchedRatio = round3(matched / textLines.length);
+  const isAligned = matchedRatio >= shift.minMatchedRatio;
+
+  return { aligned: isAligned, shiftMs, matchedRatio, method: "onset", lines: isAligned ? aligned : null };
+}
 
 function hasText(line: LyricLine): boolean {
   return line.text.trim() !== "";

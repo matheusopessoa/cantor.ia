@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { app } from "../../app.js";
+import type { Difficulty } from "../../generated/prisma/client.js";
 import { prisma } from "../../utils/prisma.js";
 import { melody, seedReadySong } from "../helpers/songs.js";
 
@@ -7,14 +8,22 @@ function ranking(id: string, query: Record<string, string> = {}) {
   return app.inject({ method: "GET", url: `/api/songs/${id}/performances`, query });
 }
 
-async function seedPerformance(songId: string, playerName: string, score: number, createdAt: Date) {
+async function seedPerformance(
+  songId: string,
+  playerName: string,
+  score: number,
+  createdAt: Date,
+  difficulty: Difficulty = "HARD",
+) {
   return prisma.performance.create({
     data: {
       songId,
       playerName,
+      difficulty,
       score,
       pitchScore: score,
       timingScore: score,
+      rhythmScore: score,
       details: { keyOffsetSemitones: 0, coverage: 1, lines: [] },
       sungTrack: melody.track,
       createdAt,
@@ -63,6 +72,43 @@ describe("GET /api/songs/:id/performances", () => {
     expect((await ranking(song.id, { limit: "50" })).json()).toHaveLength(12);
     expect((await ranking(song.id, { limit: "51" })).statusCode).toBe(400);
     expect((await ranking(song.id, { limit: "0" })).statusCode).toBe(400);
+  });
+
+  describe("níveis (sdd-009)", () => {
+    it("sem query devolve o ranking do difícil; ?difficulty= filtra o nível", async () => {
+      const song = await seedReadySong();
+      await seedPerformance(song.id, "ANA", 9, new Date(), "HARD");
+      await seedPerformance(song.id, "BIA", 10, new Date(), "EASY");
+      await seedPerformance(song.id, "CAIO", 8, new Date(), "MEDIUM");
+
+      const names = (response: Awaited<ReturnType<typeof ranking>>) =>
+        response.json().map((item: { playerName: string }) => item.playerName);
+
+      expect(names(await ranking(song.id))).toEqual(["ANA"]);
+      expect(names(await ranking(song.id, { difficulty: "HARD" }))).toEqual(["ANA"]);
+      expect(names(await ranking(song.id, { difficulty: "EASY" }))).toEqual(["BIA"]);
+      expect(names(await ranking(song.id, { difficulty: "MEDIUM" }))).toEqual(["CAIO"]);
+    });
+
+    it("o limit continua valendo dentro do nível", async () => {
+      const song = await seedReadySong();
+      for (let index = 0; index < 5; index++) {
+        await seedPerformance(song.id, `E${index}`, index, new Date(), "EASY");
+        await seedPerformance(song.id, `H${index}`, index, new Date(), "HARD");
+      }
+
+      const response = await ranking(song.id, { difficulty: "EASY", limit: "3" });
+
+      expect(response.json()).toHaveLength(3);
+      expect(response.json().every((item: { playerName: string }) => item.playerName.startsWith("E"))).toBe(true);
+    });
+
+    it("difficulty inválida → 400", async () => {
+      const song = await seedReadySong();
+
+      expect((await ranking(song.id, { difficulty: "expert" })).statusCode).toBe(400);
+      expect((await ranking(song.id, { difficulty: "easy" })).statusCode).toBe(400);
+    });
   });
 
   it("música sem performances → []", async () => {

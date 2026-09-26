@@ -4,7 +4,7 @@ import { prisma } from "../../utils/prisma.js";
 import type { PitchTrack } from "../../utils/validators.js";
 import { Prisma } from "../../generated/prisma/client.js";
 import { melody, seedReadySong, seedSong } from "../helpers/songs.js";
-import { detuneFrom, shiftLines, silence } from "../helpers/tracks.js";
+import { constant, detuneFrom, shiftLines, silence } from "../helpers/tracks.js";
 
 function submit(id: string, body: Record<string, unknown>) {
   return app.inject({ method: "POST", url: `/api/songs/${id}/performances`, payload: body });
@@ -25,12 +25,69 @@ describe("POST /api/songs/:id/performances", () => {
       score: 10,
       pitchScore: 10,
       timingScore: 10,
+      rhythmScore: 10,
+      difficulty: "HARD",
       keyOffsetSemitones: 0,
       coverage: 1,
       rank: 1,
       createdAt: expect.any(String),
     });
     expect(response.json().lines).toHaveLength(melody.lines.length);
+  });
+
+  describe("níveis (sdd-009)", () => {
+    it("sem difficulty grava HARD", async () => {
+      const song = await seedReadySong();
+
+      const response = await submit(song.id, perfect);
+
+      expect(response.json().difficulty).toBe("HARD");
+      const stored = await prisma.performance.findUniqueOrThrow({ where: { id: response.json().id } });
+      expect(stored.difficulty).toBe("HARD");
+    });
+
+    it.each(["EASY", "MEDIUM"] as const)("com %s grava o nível e devolve difficulty e rhythmScore", async (difficulty) => {
+      const song = await seedReadySong();
+
+      const response = await submit(song.id, { ...perfect, difficulty });
+
+      expect(response.statusCode).toBe(201);
+      expect(response.json()).toMatchObject({ difficulty, rhythmScore: 10, score: 10 });
+      const stored = await prisma.performance.findUniqueOrThrow({ where: { id: response.json().id } });
+      expect(stored).toMatchObject({ difficulty, rhythmScore: 10 });
+    });
+
+    it("a mesma cantoria vale mais no fácil que no difícil", async () => {
+      const song = await seedReadySong();
+      const sung = constant(melody.track, 40); // ritmo certo, nota errada
+
+      const easy = await submit(song.id, { ...perfect, difficulty: "EASY", track: sung });
+      const hard = await submit(song.id, { ...perfect, difficulty: "HARD", track: sung });
+
+      expect(easy.json().score).toBe(10);
+      expect(hard.json().score).toBeLessThan(easy.json().score);
+    });
+
+    it("rank conta só o mesmo nível", async () => {
+      const song = await seedReadySong();
+      await submit(song.id, { ...perfect, difficulty: "EASY" }); // 10 no fácil
+      await submit(song.id, { ...perfect, playerName: "BIA", difficulty: "EASY" }); // 10 no fácil
+
+      const hard = await submit(song.id, { playerName: "CAIO", difficulty: "HARD", track: silence(melody.track) });
+      const easy = await submit(song.id, { playerName: "DUDA", difficulty: "EASY", track: silence(melody.track) });
+
+      expect(hard.json().rank).toBe(1); // ninguém no difícil ainda
+      expect(easy.json().rank).toBe(3); // atrás das duas notas 10 do fácil
+    });
+
+    it("difficulty inválida → 400", async () => {
+      const song = await seedReadySong();
+
+      const response = await submit(song.id, { ...perfect, difficulty: "EXPERT" });
+
+      expect(response.statusCode).toBe(400);
+      expect(await prisma.performance.count()).toBe(0);
+    });
   });
 
   it("rank é o número de performances com nota maior + 1", async () => {

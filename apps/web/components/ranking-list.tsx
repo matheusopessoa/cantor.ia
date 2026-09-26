@@ -1,18 +1,21 @@
+import { DIFFICULTY_LABEL } from "@/lib/difficulty";
 import { formatOrdinal, formatScore } from "@/lib/format";
-import type { RankingItem } from "@/lib/types";
+import type { Difficulty, RankingItem } from "@/lib/types";
 
 interface RankingListProps {
   items: RankingItem[];
+  /** Nível deste ranking (sdd-009): rankings são por música e nível, e o título diz qual. */
+  difficulty: Difficulty;
   /** Performance a destacar (`tr.is-you`). */
   highlightId?: string | null;
 }
 
 /** HIGH SCORES de fliperama: `.ct-marquee` + `.ct-ranking`. */
-export function RankingList({ items, highlightId = null }: RankingListProps) {
+export function RankingList({ items, difficulty, highlightId = null }: RankingListProps) {
   return (
     <div className="ct-marquee">
       <table className="ct-ranking">
-        <caption>High scores</caption>
+        <caption>High scores · {DIFFICULTY_LABEL[difficulty]}</caption>
         <thead>
           <tr>
             <th scope="col">#</th>

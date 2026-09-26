@@ -300,7 +300,7 @@
     <header>
       <span class="ct-label">06 · Karaokê</span>
       <h2>O palco</h2>
-      <p>HUD em cima, highway de afinação no meio (ciano = melodia original, rosa = sua voz) e a letra enchendo embaixo.</p>
+      <p>HUD em cima, highway de afinação no meio (ciano = melodia original, rosa = sua voz) e a letra enchendo embaixo. No nível fácil o HUD mostra "Ritmo", o feedback é On time / Miss e o highway mostra presença de voz em barras.</p>
     </header>
     <div class="ct-stage ct-crt demo-stage">
       <div class="ct-hud">
@@ -321,6 +321,7 @@
           <span class="ct-hit ct-hit--perfect">Perfect</span>
           <span class="ct-hit ct-hit--good" style="animation-delay: .15s">Good</span>
           <span class="ct-hit ct-hit--miss" style="animation-delay: .3s">Miss</span>
+          <span class="ct-hit ct-hit--ontime" style="animation-delay: .45s">On time</span>
         </div>
       </div>
       <div class="ct-lyrics" aria-live="polite">
@@ -359,6 +360,10 @@
           <div class="ct-meter ct-meter--timing">
             <div class="ct-meter__head"><span class="ct-label">Tempo</span><span class="ct-numeric ct-neon-pink">7.2</span></div>
             <div class="ct-meter__bar" style="--value: .72" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="7.2" aria-label="Tempo"></div>
+          </div>
+          <div class="ct-meter ct-meter--rhythm">
+            <div class="ct-meter__head"><span class="ct-label">Ritmo (só no fácil)</span><span class="ct-numeric" style="color: var(--fret-green)">9.1</span></div>
+            <div class="ct-meter__bar" style="--value: .91" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="9.1" aria-label="Ritmo"></div>
           </div>
         </div>
         <div class="doc-row"><button class="ct-btn ct-btn--primary">Cantar de novo</button><button class="ct-btn ct-btn--secondary">Outra música</button></div>

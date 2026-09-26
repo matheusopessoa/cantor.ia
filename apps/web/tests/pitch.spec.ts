@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DIFFICULTY_THRESHOLDS,
   centsFromReference,
   detectionToMidi,
   foldToReference,
@@ -7,7 +8,11 @@ import {
   hitForCents,
   hzToMidi,
   meanCentsError,
+  presenceHit,
 } from "../lib/pitch";
+
+const HARD = DIFFICULTY_THRESHOLDS.HARD;
+const MEDIUM = DIFFICULTY_THRESHOLDS.MEDIUM;
 
 describe("hzToMidi", () => {
   it("A4 (440 Hz) é 69 e A3 (220 Hz) é 57", () => {
@@ -50,12 +55,26 @@ describe("centsFromReference / hitForCents", () => {
     expect(centsFromReference(56.5, 69)).toBeCloseTo(-50, 6);
   });
 
-  it("classifica PERFECT (≤ 50), GOOD (≤ 100) e MISS", () => {
-    expect(hitForCents(0)).toBe("perfect");
-    expect(hitForCents(-50)).toBe("perfect");
-    expect(hitForCents(51)).toBe("good");
-    expect(hitForCents(100)).toBe("good");
-    expect(hitForCents(101)).toBe("miss");
+  it("no difícil classifica PERFECT (≤ 50), GOOD (≤ 100) e MISS", () => {
+    expect(hitForCents(0, HARD)).toBe("perfect");
+    expect(hitForCents(-50, HARD)).toBe("perfect");
+    expect(hitForCents(51, HARD)).toBe("good");
+    expect(hitForCents(100, HARD)).toBe("good");
+    expect(hitForCents(101, HARD)).toBe("miss");
+  });
+
+  it("no médio os limiares dobram: PERFECT (≤ 100), GOOD (≤ 200) e MISS (sdd-009)", () => {
+    expect(hitForCents(75, MEDIUM)).toBe("perfect");
+    expect(hitForCents(-100, MEDIUM)).toBe("perfect");
+    expect(hitForCents(101, MEDIUM)).toBe("good");
+    expect(hitForCents(200, MEDIUM)).toBe("good");
+    expect(hitForCents(201, MEDIUM)).toBe("miss");
+  });
+
+  it("os limiares do feedback são os da nota: difícil 50/100, médio e fácil 100/200", () => {
+    expect(HARD).toEqual({ perfectCents: 50, goodCents: 100 });
+    expect(MEDIUM).toEqual({ perfectCents: 100, goodCents: 200 });
+    expect(DIFFICULTY_THRESHOLDS.EASY).toEqual(MEDIUM);
   });
 });
 
@@ -109,18 +128,54 @@ describe("framesToTrack", () => {
 
 describe("meanCentsError", () => {
   it("é null quando a referência não tem voz no trecho", () => {
-    expect(meanCentsError([null, null], [60, 60], 0, 2)).toBeNull();
+    expect(meanCentsError([null, null], [60, 60], 0, 2, HARD)).toBeNull();
   });
 
   it("calcula a média do erro absoluto, dobrando a oitava", () => {
-    expect(meanCentsError([69, 69], [69.5, 57], 0, 2)).toBeCloseTo(25, 6);
+    expect(meanCentsError([69, 69], [69.5, 57], 0, 2, HARD)).toBeCloseTo(25, 6);
   });
 
-  it("conta frame sem voz como erro máximo", () => {
-    expect(meanCentsError([69], [null], 0, 1)).toBe(200);
+  it("conta frame sem voz como erro máximo do nível (o dobro do GOOD: sempre MISS)", () => {
+    expect(meanCentsError([69], [null], 0, 1, HARD)).toBe(200);
+    expect(meanCentsError([69], [null], 0, 1, MEDIUM)).toBe(400);
+    expect(hitForCents(meanCentsError([69], [null], 0, 1, MEDIUM)!, MEDIUM)).toBe("miss");
   });
 
   it("ignora índices fora dos arrays", () => {
-    expect(meanCentsError([69], [69], -5, 50)).toBe(0);
+    expect(meanCentsError([69], [69], -5, 50, HARD)).toBe(0);
+  });
+});
+
+describe("presenceHit (feedback de ritmo do fácil, sdd-009)", () => {
+  const voiced = (count: number) => new Array<number | null>(count).fill(60);
+  const silent = (count: number) => new Array<number | null>(count).fill(null);
+
+  it("é null quando nem a referência nem a voz têm voz na janela", () => {
+    expect(presenceHit(silent(25), silent(25), 0, 25)).toBeNull();
+    expect(presenceHit(silent(25), [], 0, 25)).toBeNull();
+  });
+
+  it("é ON TIME quando as presenças coincidem, em qualquer tom", () => {
+    expect(presenceHit(voiced(25), voiced(25).map(() => 40), 0, 25)).toBe("ontime");
+    expect(presenceHit([...voiced(10), ...silent(15)], [...voiced(10), ...silent(15)], 0, 25)).toBe("ontime");
+  });
+
+  it("tolera pequenas diferenças na borda (F1 ≥ 0,7)", () => {
+    // Referência com voz nos 20 primeiros frames; a pessoa entrou 3 frames depois.
+    expect(presenceHit([...voiced(20), ...silent(5)], [...silent(3), ...voiced(17), ...silent(5)], 0, 25)).toBe("ontime");
+  });
+
+  it("é MISS quando faltou voz (ficou calado onde a música canta)", () => {
+    expect(presenceHit(voiced(25), silent(25), 0, 25)).toBe("miss");
+    expect(presenceHit(voiced(25), [...voiced(5), ...silent(20)], 0, 25)).toBe("miss");
+  });
+
+  it("é MISS quando sobrou voz (cantou onde a música está em silêncio)", () => {
+    expect(presenceHit(silent(25), voiced(25), 0, 25)).toBe("miss");
+    expect(presenceHit([...voiced(5), ...silent(20)], voiced(25), 0, 25)).toBe("miss");
+  });
+
+  it("ignora índices fora dos arrays", () => {
+    expect(presenceHit(voiced(5), voiced(5), -10, 50)).toBe("ontime");
   });
 });

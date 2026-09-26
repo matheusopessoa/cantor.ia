@@ -7,8 +7,15 @@ import pytest
 import soundfile as sf
 from fastapi.testclient import TestClient
 
-from app import main
+from app import config, main
 from app.audio import SAMPLE_RATE
+
+
+@pytest.fixture(autouse=True)
+def no_openai_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A suíte nunca usa a `OPENAI_API_KEY` do `.env` de dev (sdd-014): sem rede e sem gasto.
+    Quem testa o provedor da OpenAI configura a chave falsa explicitamente."""
+    monkeypatch.setattr(config, "settings", lambda: config.Settings(OPENAI_API_KEY=None))
 
 
 def sine(freq_hz: float, seconds: float, amp: float = 0.5) -> np.ndarray:
@@ -73,14 +80,19 @@ class FakeYoutubeDL:
     info: dict = {"duration": 3, "is_live": False, "live_status": "not_live"}
     raise_on_extract: Exception | None = None
     raise_on_download: Exception | None = None
+    download_failures: list[Exception] = []   # levantadas uma por tentativa, antes de baixar
     audio: np.ndarray | None = None
     ext: str = "m4a"
     slow_steps: int = 0          # > 0: simula download lento chamando os progress_hooks
+    search_entries: list[dict] = []   # resultados devolvidos por `ytsearchN:` (sdd-008)
+    search_delay_s: float = 0.0       # > 0: simula busca lenta
     calls: list[str] = []
+    options_seen: list[dict] = []     # opções de cada YoutubeDL criado
     finished: bool = False
 
     def __init__(self, options: dict):
         self.options = options
+        FakeYoutubeDL.options_seen.append(options)
 
     def __enter__(self):
         return self
@@ -92,9 +104,15 @@ class FakeYoutubeDL:
         FakeYoutubeDL.calls.append(url)
         if FakeYoutubeDL.raise_on_extract:
             raise FakeYoutubeDL.raise_on_extract
+        if url.startswith("ytsearch"):
+            if FakeYoutubeDL.search_delay_s:
+                time.sleep(FakeYoutubeDL.search_delay_s)
+            return {"_type": "playlist", "entries": [dict(e) for e in FakeYoutubeDL.search_entries]}
         return dict(FakeYoutubeDL.info)
 
     def process_ie_result(self, info: dict, download: bool = True):
+        if FakeYoutubeDL.download_failures:
+            raise FakeYoutubeDL.download_failures.pop(0)
         if FakeYoutubeDL.raise_on_download:
             raise FakeYoutubeDL.raise_on_download
         out = Path(self.options["outtmpl"].replace("%(ext)s", FakeYoutubeDL.ext))
@@ -118,12 +136,17 @@ def fake_ytdl(monkeypatch: pytest.MonkeyPatch) -> type[FakeYoutubeDL]:
     FakeYoutubeDL.info = {"duration": 3, "is_live": False, "live_status": "not_live"}
     FakeYoutubeDL.raise_on_extract = None
     FakeYoutubeDL.raise_on_download = None
+    FakeYoutubeDL.download_failures = []
     FakeYoutubeDL.audio = None
     FakeYoutubeDL.ext = "m4a"
     FakeYoutubeDL.slow_steps = 0
+    FakeYoutubeDL.search_entries = []
+    FakeYoutubeDL.search_delay_s = 0.0
     FakeYoutubeDL.calls = []
+    FakeYoutubeDL.options_seen = []
     FakeYoutubeDL.finished = False
     monkeypatch.setattr("app.youtube.yt_dlp.YoutubeDL", FakeYoutubeDL)
+    monkeypatch.setattr("app.youtube.RETRY_DELAYS_S", (0, 0))   # novas tentativas sem esperar
     return FakeYoutubeDL
 
 

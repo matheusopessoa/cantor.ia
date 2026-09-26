@@ -150,6 +150,9 @@
   `match_filter` recusando `is_live` e `duration > 600`, `socket_timeout` 30 s, sem cookies,
   `outtmpl` dentro do diretório temporário da requisição. Timeout total do download: 2 min.
 - **`GET /health`** → `{ "status": "ok", "models": { "demucs": bool, "crepe": bool } }`.
+- **`POST /youtube/search`** (adicionado pela sdd-008, 2026-09-26): busca sem download para a
+  API sugerir o vídeo certo; contrato, erros `invalid_query`/`search_failed` e opções do
+  `yt-dlp` em [`specs/sdd-008-youtube-suggestion/tasks.md`](../sdd-008-youtube-suggestion/tasks.md) §4.
 - **Formato `PitchTrack`** (contrato compartilhado com `apps/api` em sdd-002 e com
   `apps/web` em sdd-004; o mesmo formato vale para a referência e para a voz cantada):
   ```ts

@@ -25,12 +25,6 @@ export function formatOffset(offsetMs: number): string {
   return `${seconds >= 0 ? "+" : "-"}${Math.abs(seconds).toFixed(1)}s`;
 }
 
-/** Deslocamento do alinhamento da letra em segundos, pt-BR, com sinal (+3,2 s, -0,5 s, +0,0 s). */
-export function formatAlignmentShift(shiftMs: number): string {
-  const seconds = (Number.isFinite(shiftMs) ? shiftMs : 0) / 1000;
-  return `${seconds >= 0 ? "+" : "-"}${Math.abs(seconds).toFixed(1).replace(".", ",")} s`;
-}
-
 /** Posição no ranking em inglês de fliperama, só para o HUD: 1st, 2nd, 3rd, 4th, 11th, 21st. */
 export function formatOrdinal(rank: number): string {
   const mod100 = rank % 100;

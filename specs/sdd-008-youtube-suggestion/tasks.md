@@ -120,6 +120,24 @@
              | "medium" se top.tier = 1, ou top.tier = 2 com viewCount ≥ 100 000
              | "low"    caso contrário
   ```
+- **Decisões de implementação (2026-09-26, `code-implementer`)**, onde o código difere do
+  pseudocódigo acima, sempre a favor dos critérios das seções 5 e 6:
+  1. Candidato com palavra "ruim" (fora das isentas) vai para o **fim da camada 2**, mesmo
+     que seja o mais visto: ordenar a camada 2 só por visualizações deixaria "karaokê" ou
+     "ao vivo" muito vistos na frente de um áudio comum, contra a regra 4 e o critério
+     "'ao vivo' com duração igual perde para um áudio comum".
+  2. Camada 1 exige, além de `score ≥ officialMin`, **alguma marca de oficial** (`TOPIC_CHANNEL`,
+     `OFFICIAL_AUDIO`, `ARTIST_CHANNEL`, `OFFICIAL`, `LYRIC_VIDEO`): título certo + duração
+     exata somam 2 pontos mas não são "marca de oficial" (regra 4).
+  3. Desempate da camada 2 (pedido na seção 6): mesma **ordem de grandeza** de visualizações
+     (mesmo número de dígitos) → vence a duração exata (≤ 2 s); uma ordem de grandeza a mais →
+     vence o mais visto.
+  4. O canal "- Topic" contém o nome do artista, então soma `TOPIC_CHANNEL` **e**
+     `ARTIST_CHANNEL` (3 + 2), como o pseudocódigo permite.
+  5. `query.results` não existe em `SUGGESTION_CONFIG`: a contagem (15) é fixa no worker
+     (`SEARCH_RESULTS`), que é quem faz a busca. `buildQuery` mantém os acentos (o YouTube
+     lida bem com eles e a grafia do LRCLIB é a canônica) e remove só parênteses, colchetes
+     e "feat.".
 - Consulta enviada ao worker: `"${artist} ${title}"` com espaços normalizados, máx. 200
   caracteres. Uma busca só (15 resultados): o canal "- Topic" e o "official audio" aparecem
   nos primeiros resultados quando existem, e 15 dá amostra suficiente para a camada 2.

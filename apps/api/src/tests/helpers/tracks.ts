@@ -1,4 +1,4 @@
-import type { LyricLine, PitchTrack } from "../../utils/validators.js";
+import type { ForcedAlignment, LyricLine, PitchTrack } from "../../utils/validators.js";
 
 export const HOP_MS = 10;
 
@@ -158,4 +158,41 @@ export function jitterLines(lines: LyricLine[], seed: number, maxMs: number): Ly
     const jitter = Math.round(between(rand, -maxMs, maxMs) / HOP_MS) * HOP_MS;
     return { ...line, startMs: Math.max(0, line.startMs + jitter) };
   });
+}
+
+export interface ForcedFromOptions {
+  /** Score de todas as linhas com texto (padrão 0,9), ou por índice em `scores`. */
+  score?: number;
+  scores?: Record<number, number>;
+  /** Índices que o worker não alinhou (`startMs`/`endMs`/`score` nulos). */
+  drop?: number[];
+  /** Jitter uniforme em [-maxMs, maxMs] por linha, seedado, em múltiplos de 20 ms (frame do MMS_FA). */
+  jitter?: number;
+  seed?: number;
+  /** Duração de cada linha (padrão 2 s), ou por índice em `durations`. */
+  lineMs?: number;
+  durations?: Record<number, number>;
+}
+
+/**
+ * Alinhamento forçado como o worker devolveria (sdd-010) para linhas cantadas exatamente em
+ * `truth` (mesma ordem da letra enviada). Linha sem texto sai com os campos nulos, como no
+ * worker.
+ */
+export function forcedFrom(truth: LyricLine[], options: ForcedFromOptions = {}): ForcedAlignment {
+  const { score = 0.9, scores = {}, drop = [], jitter = 0, seed = 1, lineMs = 2_000, durations = {} } = options;
+  const rand = mulberry32(seed);
+  const empty = (index: number) => ({ index, startMs: null, endMs: null, score: null });
+
+  return {
+    version: 1,
+    model: "mms_fa",
+    frameMs: 20,
+    lines: truth.map((line, index) => {
+      const offset = jitter > 0 ? Math.round(between(rand, -jitter, jitter) / 20) * 20 : 0;
+      if (line.text.trim() === "" || drop.includes(index)) return empty(index);
+      const startMs = Math.max(0, line.startMs + offset);
+      return { index, startMs, endMs: startMs + (durations[index] ?? lineMs), score: scores[index] ?? score };
+    }),
+  };
 }

@@ -9,17 +9,32 @@ import { PitchCanvas } from "./pitch-canvas";
 import { PlayerNameField } from "./player-name-field";
 import { RankingList } from "./ranking-list";
 import { ScoreResult } from "./score-result";
+import { SecondOutputField } from "./second-output-field";
 import { api } from "@/lib/api";
 import { durationMatches, readAudioDurationMs } from "@/lib/audio-duration";
 import { getSongAudio, saveSongAudio } from "@/lib/audio-store";
+import { DIFFICULTY_DESCRIPTION, DIFFICULTY_LABEL } from "@/lib/difficulty";
 import { formatDuration, formatOffset } from "@/lib/format";
 import { currentLineIndex, effectiveLyrics, lineProgress } from "@/lib/lyrics";
+import { MONITOR_MAX, MONITOR_MIN, MONITOR_STEP, monitorGain } from "@/lib/monitor-volume";
+import { SINGER_MAX, SINGER_MIN, SINGER_STEP, singerGain, stemsMatchOriginal } from "@/lib/singer-volume";
+import { getSongStems, saveSongStems, type SongStems } from "@/lib/stems-store";
+import { createSecondOutput, type SecondOutput } from "@/lib/music-output";
 import { OFFSET_MAX_MS, OFFSET_MIN_MS, OFFSET_STEP_MS, normalizeOffsetMs } from "@/lib/lyrics-offset";
-import { HOP_MS, framesToTrack, hitForCents, meanCentsError, type Hit } from "@/lib/pitch";
+import {
+  DIFFICULTY_THRESHOLDS,
+  HOP_MS,
+  framesToTrack,
+  hitForCents,
+  meanCentsError,
+  presenceHit,
+  type Hit,
+  type PresenceHit,
+} from "@/lib/pitch";
 import { isValidPlayerName, normalizePlayerName } from "@/lib/player-name";
 import { MIC_CONSTRAINTS, audioLatencySeconds, createRecorder, loadCaptureWorklet, type Recorder } from "@/lib/recorder";
 import type { PerformanceResult, PitchTrack, RankingItem, SongDto } from "@/lib/types";
-import { useLyricsOffset, usePlayerName } from "@/lib/use-prefs";
+import { useDifficulty, useLyricsOffset, useMonitorVolume, usePlayerName, useSecondOutput, useSingerVolume } from "@/lib/use-prefs";
 
 interface Notice {
   tone: AlertTone;
@@ -46,16 +61,33 @@ interface Hud {
   progress: number;
 }
 
+/**
+ * Trilhas separadas (voz e instrumental, sdd-013) desta música neste aparelho: `idle` antes
+ * de o áudio estar pronto, `preparing` enquanto o worker separa (1–2 min, só na primeira
+ * vez), `ready` com as duas em cache, `failed` quando não deu (a música toca como o original).
+ */
+type StemsStatus = "idle" | "preparing" | "ready" | "failed";
+
+interface StemBuffers {
+  vocals: AudioBuffer;
+  instrumental: AudioBuffer;
+}
+
+/** Feedback ao vivo: PERFECT/GOOD/MISS (médio e difícil) ou ON TIME/MISS (fácil, sdd-009). */
+type LiveHit = Hit | PresenceHit;
+
 const COUNTDOWN_S = 3;
-/** Feedback PERFECT/GOOD/MISS a cada 250 ms, sobre os 250 ms anteriores. */
+/** Feedback a cada 250 ms, sobre os 250 ms anteriores. */
 const HIT_INTERVAL_MS = 250;
 const HIT_WINDOW_FRAMES = HIT_INTERVAL_MS / HOP_MS;
 /** Os últimos frames ainda não chegaram do microfone (latência): avalia 100 ms atrás. */
 const HIT_LAG_FRAMES = 10;
 /** Atualiza a barra de progresso do download no máximo a cada 150 ms. */
 const PROGRESS_THROTTLE_MS = 150;
+/** Mudança de volume da voz do cantor sem estalo: `setTargetAtTime` com esta constante de tempo. */
+const SINGER_GAIN_RAMP_S = 0.02;
 
-const HIT_LABEL: Record<Hit, string> = { perfect: "Perfect", good: "Good", miss: "Miss" };
+const HIT_LABEL: Record<LiveHit, string> = { perfect: "Perfect", good: "Good", miss: "Miss", ontime: "On time" };
 
 const HEADPHONES_COPY: Notice = {
   tone: "warning",
@@ -125,11 +157,19 @@ interface OffsetFieldProps {
 
 function OffsetField({ value, onChange, aligned }: OffsetFieldProps) {
   const id = useId();
+  const shifted = value !== 0;
   return (
     <div className="ct-field">
-      <label className="ct-field__label" htmlFor={id}>
-        Ajuste fino da letra: <span className="ct-numeric text-neon-cyan">{formatOffset(value)}</span>
-      </label>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <label className="ct-field__label" htmlFor={id}>
+          Ajuste fino da letra: <span className="ct-numeric text-neon-cyan">{formatOffset(value)}</span>
+        </label>
+        {shifted ? (
+          <button type="button" className="ct-btn ct-btn--ghost ct-btn--sm" onClick={() => onChange(0)}>
+            Zerar
+          </button>
+        ) : null}
+      </div>
       <input
         id={id}
         className="ct-range"
@@ -143,6 +183,119 @@ function OffsetField({ value, onChange, aligned }: OffsetFieldProps) {
       <span className="ct-field__hint">
         {aligned ? "A letra já vem alinhada ao áudio. Se ainda aparecer" : "A letra aparece"} atrasada? Arraste para a
         direita. Adiantada? Para a esquerda. O ajuste só desloca a letra, a velocidade é sempre a da música.
+        {shifted ? (
+          <>
+            {" "}
+            <strong>A nota de tempo cobra a entrada de cada verso já deslocado</strong>: cante seguindo a
+            letra da tela ou zere o ajuste.
+          </>
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
+interface MonitorFieldProps {
+  value: number;
+  onChange: (value: number) => void;
+}
+
+/** Volume da própria voz no fone (retorno do microfone). 0 desliga. */
+function MonitorField({ value, onChange }: MonitorFieldProps) {
+  const id = useId();
+  return (
+    <div className="ct-field">
+      <label className="ct-field__label" htmlFor={id}>
+        Sua voz no fone:{" "}
+        <span className="ct-numeric text-neon-cyan">{value === 0 ? "desligada" : `${value}%`}</span>
+      </label>
+      <input
+        id={id}
+        className="ct-range"
+        type="range"
+        min={MONITOR_MIN}
+        max={MONITOR_MAX}
+        step={MONITOR_STEP}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+      <span className="ct-field__hint">
+        Só com fone: sem ele, a caixa de som devolve a voz ao microfone e dá microfonia. No Bluetooth a voz volta
+        atrasada; se atrapalhar, desligue.
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Decodifica as duas trilhas no mesmo `AudioContext` da música. `null` quando alguma não
+ * decodifica ou não tem a duração do original (regra 7): a sessão toca o original.
+ */
+async function decodeStems(context: AudioContext, stems: SongStems, originalMs: number): Promise<StemBuffers | null> {
+  try {
+    const [vocals, instrumental] = await Promise.all([
+      context.decodeAudioData(await stems.vocals.arrayBuffer()),
+      context.decodeAudioData(await stems.instrumental.arrayBuffer()),
+    ]);
+    const vocalsMs = Math.round(vocals.duration * 1000);
+    const instrumentalMs = Math.round(instrumental.duration * 1000);
+    if (!stemsMatchOriginal(vocalsMs, instrumentalMs, originalMs)) return null;
+    return { vocals, instrumental };
+  } catch {
+    return null;
+  }
+}
+
+interface SingerVolumeFieldProps {
+  value: number;
+  onChange: (value: number) => void;
+  status: StemsStatus;
+  /** No palco: a rodada está tocando as trilhas (`true`) ou o original (`false`). Fora dele, `null`. */
+  playingStems: boolean | null;
+}
+
+/** Volume da voz do cantor original (sdd-013). Só mexe em algo com as trilhas separadas. */
+function SingerVolumeField({ value, onChange, status, playingStems }: SingerVolumeFieldProps) {
+  const id = useId();
+  const enabled = playingStems === null ? status === "ready" : playingStems;
+  let hint: string;
+  if (playingStems === false) {
+    hint = "Nesta rodada a música toca como o original; o controle vale a partir da próxima.";
+  } else if (status === "preparing") {
+    hint = "Separando a voz do cantor do instrumental (leva 1 a 2 min, só na primeira vez). Enquanto isso, a música toca como o original.";
+  } else if (status === "failed") {
+    hint = "Não deu para separar a voz do cantor: a música toca como o original.";
+  } else if (status === "idle") {
+    hint = "A voz do cantor é separada assim que a música estiver pronta.";
+  } else {
+    hint = "100% é a música como veio; 0% deixa só o instrumental (pode sobrar um resto da voz). Muda na hora, até no meio da música.";
+  }
+  return (
+    <div className="ct-field">
+      <label className="ct-field__label" htmlFor={id}>
+        Voz do cantor:{" "}
+        <span className="ct-numeric text-neon-cyan">{value === 0 ? "desligada" : `${value}%`}</span>
+      </label>
+      <input
+        id={id}
+        className="ct-range"
+        type="range"
+        min={SINGER_MIN}
+        max={SINGER_MAX}
+        step={SINGER_STEP}
+        value={value}
+        disabled={!enabled}
+        aria-describedby={`${id}-hint`}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+      {status === "preparing" && playingStems === null ? (
+        <div className="ct-loading" aria-live="polite">
+          <span className="ct-loading__title">Preparando a voz do cantor</span>
+          <div className="ct-loading__bar" role="progressbar" aria-label="Preparando a voz do cantor" />
+        </div>
+      ) : null}
+      <span id={`${id}-hint`} className="ct-field__hint">
+        {hint}
       </span>
     </div>
   );
@@ -156,18 +309,38 @@ export function KaraokeSession({ song }: { song: SongDto }) {
   const [phase, setPhase] = useState<Phase>({ kind: "loading-audio" });
   const [reference, setReference] = useState<PitchTrack | null>(null);
   const { name, setName, commit: commitName } = usePlayerName();
-  const [offsetMs, setOffsetMs] = useLyricsOffset(song.id);
+  // O ajuste é guardado por versão da letra: o da original não vale para a alinhada.
+  const [offsetMs, setOffsetMs] = useLyricsOffset(song.id, aligned);
+  // Nível escolhido na preparação (sdd-009): limiares do feedback, HUD, highway e nota.
+  const [difficulty] = useDifficulty();
+  // Retorno do microfone no fone: ajustável antes e durante a cantoria.
+  const [monitorVolume, setMonitorVolume] = useMonitorVolume();
+  // Aparelho onde a música também toca (caixa de som, TV); o retorno da voz fica só no fone.
+  const [secondOutputId, setSecondOutputId] = useSecondOutput();
+  // Voz do cantor original (sdd-013): vale quando as trilhas separadas estão prontas.
+  const [singerVolume, setSingerVolume] = useSingerVolume();
+  const [stemsStatus, setStemsStatus] = useState<StemsStatus>("idle");
+  /** No palco: a rodada toca as trilhas (`true`) ou o original (`false`). */
+  const [playingStems, setPlayingStems] = useState(false);
+  const thresholds = DIFFICULTY_THRESHOLDS[difficulty];
+  const easy = difficulty === "EASY";
   const [durationMs, setDurationMs] = useState(song.durationMs);
   const [hud, setHud] = useState<Hud>({ timeMs: 0, lineIndex: -1, progress: 0 });
+  /** Fração das janelas sem MISS: "Afinação" no médio e no difícil, "Ritmo" no fácil. */
   const [accuracy, setAccuracy] = useState<number | null>(null);
-  const [hit, setHit] = useState<{ kind: Hit; key: number } | null>(null);
+  const [hit, setHit] = useState<{ kind: LiveHit; key: number } | null>(null);
 
   const mountedRef = useRef(false);
   const referenceRef = useRef<PitchTrack | null>(null);
   const audioRef = useRef<Blob | null>(null);
   const durationRef = useRef(song.durationMs);
   const contextRef = useRef<AudioContext | null>(null);
-  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  /** As fontes da rodada: só o original, ou voz + instrumental (sdd-013). */
+  const sourcesRef = useRef<AudioBufferSourceNode[]>([]);
+  const singerGainRef = useRef<GainNode | null>(null);
+  const stemsRef = useRef<SongStems | null>(null);
+  const stemsAbortRef = useRef<AbortController | null>(null);
+  const secondOutputRef = useRef<SecondOutput | null>(null);
   const recorderRef = useRef<Recorder | null>(null);
   const voiceFramesRef = useRef<(number | null)[]>([]);
   const startTimeRef = useRef(0);
@@ -185,19 +358,29 @@ export function KaraokeSession({ song }: { song: SongDto }) {
     return (context.currentTime - startTimeRef.current - outputLatencyRef.current) * 1000;
   }, []);
 
-  /** Solta tudo: laços, microfone, fonte e AudioContext. */
+  /** Para as fontes da rodada (a que ainda não começou não reclama). */
+  const stopSources = () => {
+    for (const source of sourcesRef.current) {
+      try {
+        source.stop();
+      } catch {
+        // ainda não tinha começado ou já parou
+      }
+    }
+    sourcesRef.current = [];
+    singerGainRef.current = null;
+  };
+
+  /** Solta tudo: laços, microfone, fontes e AudioContext. */
   const teardown = useCallback(() => {
     finishedRef.current = true;
     cancelAnimationFrame(rafRef.current);
     window.clearInterval(hitTimerRef.current);
     recorderRef.current?.stop();
     recorderRef.current = null;
-    try {
-      sourceRef.current?.stop();
-    } catch {
-      // ainda não tinha começado
-    }
-    sourceRef.current = null;
+    stopSources();
+    secondOutputRef.current?.stop();
+    secondOutputRef.current = null;
     const context = contextRef.current;
     contextRef.current = null;
     if (context && context.state !== "closed") void context.close();
@@ -210,7 +393,43 @@ export function KaraokeSession({ song }: { song: SongDto }) {
     hitStatsRef.current = { hits: 0, total: 0 };
   }, []);
 
-  /** Valida a duração (regra 4) e guarda o áudio para tocar. */
+  /**
+   * Trilhas separadas deste áudio (sdd-013, regra 2): do cache do aparelho ou geradas em segundo
+   * plano pelo worker, uma vez por música por aparelho. Nunca trava a cantoria: em falha, a
+   * música toca como o original (regra 3).
+   */
+  const prepareStems = useCallback(
+    async (blob: Blob) => {
+      stemsAbortRef.current?.abort();
+      const controller = new AbortController();
+      stemsAbortRef.current = controller;
+      stemsRef.current = null;
+
+      const cached = await getSongStems(song.id);
+      if (controller.signal.aborted) return;
+      if (cached && cached.sourceSize === blob.size) {
+        stemsRef.current = cached;
+        setStemsStatus("ready");
+        return;
+      }
+
+      setStemsStatus("preparing");
+      try {
+        const { vocals, instrumental } = await api.separateStems(song.id, blob, controller.signal);
+        if (controller.signal.aborted) return;
+        const stems: SongStems = { vocals, instrumental, sourceSize: blob.size };
+        await saveSongStems(song.id, stems);
+        if (controller.signal.aborted) return;
+        stemsRef.current = stems;
+        setStemsStatus("ready");
+      } catch {
+        if (!controller.signal.aborted) setStemsStatus("failed");
+      }
+    },
+    [song.id],
+  );
+
+  /** Valida a duração (regra 4), guarda o áudio para tocar e dispara as trilhas (sdd-013). */
   const acceptAudio = useCallback(
     async (blob: Blob, origin: "cache" | "download" | "file", signal?: AbortSignal) => {
       setPhase({ kind: "checking-duration" });
@@ -232,8 +451,9 @@ export function KaraokeSession({ song }: { song: SongDto }) {
       durationRef.current = audioMs ?? song.durationMs;
       setDurationMs(durationRef.current);
       setPhase({ kind: "ready", notice: null });
+      void prepareStems(blob);
     },
-    [song.durationMs],
+    [song.durationMs, prepareStems],
   );
 
   useEffect(() => {
@@ -294,9 +514,23 @@ export function KaraokeSession({ song }: { song: SongDto }) {
     return () => {
       mountedRef.current = false;
       controller.abort();
+      stemsAbortRef.current?.abort();
       teardown();
     };
   }, [song.id, song.youtubeVideoId, acceptAudio, teardown]);
+
+  const changeMonitorVolume = (value: number) => {
+    setMonitorVolume(value);
+    recorderRef.current?.setMonitorGain(monitorGain(value));
+  };
+
+  /** Muda o volume da voz do cantor na hora, sem estalo (regra 4). */
+  const changeSingerVolume = (value: number) => {
+    setSingerVolume(value);
+    const gain = singerGainRef.current;
+    const context = contextRef.current;
+    if (gain && context) gain.gain.setTargetAtTime(singerGain(value), context.currentTime, SINGER_GAIN_RAMP_S);
+  };
 
   const changeOffset = (value: number) => {
     offsetRef.current = normalizeOffsetMs(value);
@@ -336,9 +570,18 @@ export function KaraokeSession({ song }: { song: SongDto }) {
       const t = getTimeMs();
       if (t < 0) return;
       const end = Math.floor(t / HOP_MS) - HIT_LAG_FRAMES;
-      const error = meanCentsError(track.midi, voiceFramesRef.current, end - HIT_WINDOW_FRAMES, end);
-      if (error === null) return;
-      const kind = hitForCents(error);
+      const from = end - HIT_WINDOW_FRAMES;
+      let kind: LiveHit;
+      if (easy) {
+        // Fácil: só se cantou no lugar certo, em qualquer tom (sdd-009 regra 6).
+        const presence = presenceHit(track.midi, voiceFramesRef.current, from, end);
+        if (presence === null) return;
+        kind = presence;
+      } else {
+        const error = meanCentsError(track.midi, voiceFramesRef.current, from, end, thresholds);
+        if (error === null) return;
+        kind = hitForCents(error, thresholds);
+      }
       const stats = hitStatsRef.current;
       stats.total++;
       if (kind !== "miss") stats.hits++;
@@ -361,12 +604,9 @@ export function KaraokeSession({ song }: { song: SongDto }) {
 
     recorder?.stop();
     recorderRef.current = null;
-    try {
-      sourceRef.current?.stop();
-    } catch {
-      // já parou
-    }
-    sourceRef.current = null;
+    stopSources();
+    secondOutputRef.current?.stop();
+    secondOutputRef.current = null;
     contextRef.current = null;
     if (context && context.state !== "closed") void context.close();
 
@@ -375,8 +615,8 @@ export function KaraokeSession({ song }: { song: SongDto }) {
 
     const track = framesToTrack(frames, elapsedMs);
     try {
-      const result = await api.submitPerformance(song.id, { playerName, offsetMs: offsetRef.current, track });
-      const ranking = await api.getRanking(song.id, 10);
+      const result = await api.submitPerformance(song.id, { playerName, offsetMs: offsetRef.current, difficulty, track });
+      const ranking = await api.getRanking(song.id, 10, result.difficulty);
       if (mountedRef.current) setPhase({ kind: "result", result, ranking });
     } catch {
       if (mountedRef.current) setPhase({ kind: "ready", notice: SUBMIT_FAILED_COPY });
@@ -402,10 +642,19 @@ export function KaraokeSession({ song }: { song: SongDto }) {
 
     const context = new AudioContext();
     contextRef.current = context;
+    // Ainda no gesto do clique, para o play() do segundo aparelho ser liberado.
+    const secondOutput = createSecondOutput(context, secondOutputId);
     try {
       await context.resume();
     } catch {
       // alguns browsers só liberam depois; a fonte começa no start()
+    }
+    secondOutputRef.current = await secondOutput;
+    if (contextRef.current !== context) {
+      // "Parar" ou desmontagem enquanto o aparelho abria
+      secondOutputRef.current?.stop();
+      secondOutputRef.current = null;
+      return;
     }
 
     setPhase({ kind: "mic-permission" });
@@ -422,7 +671,7 @@ export function KaraokeSession({ song }: { song: SongDto }) {
       return;
     }
 
-    let buffer: AudioBuffer;
+    let buffer: AudioBuffer | null;
     try {
       await loadCaptureWorklet(context);
       buffer = await context.decodeAudioData(await blob.arrayBuffer());
@@ -448,19 +697,56 @@ export function KaraokeSession({ song }: { song: SongDto }) {
     durationRef.current = decodedMs;
     setDurationMs(decodedMs);
 
+    // Trilhas separadas (sdd-013): decodificadas no mesmo contexto; fora da duração do original
+    // ou com falha, a rodada toca o original. Prontas no meio de uma rodada valem na próxima.
+    const stems = stemsRef.current;
+    const stemBuffers = stems ? await decodeStems(context, stems, decodedMs) : null;
+    if (!mountedRef.current || contextRef.current !== context) {
+      for (const track of stream.getTracks()) track.stop();
+      teardown();
+      return;
+    }
+    if (stemBuffers) buffer = null; // o original não é mais necessário nesta rodada
+
     const latency = audioLatencySeconds(context);
     outputLatencyRef.current = latency - context.baseLatency;
     const startTime = context.currentTime + COUNTDOWN_S;
     startTimeRef.current = startTime;
 
-    const source = context.createBufferSource();
-    source.buffer = buffer;
-    source.connect(context.destination);
-    source.onended = () => void finish(playerName);
-    source.start(startTime);
-    sourceRef.current = source;
+    // Tudo que é música passa pelo bus: fone e segunda saída recebem a mesma mistura (regra 6);
+    // o retorno do microfone continua ligado só ao fone, pelo recorder.
+    const bus = context.createGain();
+    bus.connect(context.destination);
+    if (secondOutputRef.current) bus.connect(secondOutputRef.current.input);
 
-    const recorder = createRecorder({ context, stream, startTime, latency });
+    const sources: AudioBufferSourceNode[] = [];
+    if (stemBuffers) {
+      const singer = context.createGain();
+      singer.gain.value = singerGain(singerVolume);
+      singer.connect(bus);
+      singerGainRef.current = singer;
+
+      const vocals = context.createBufferSource();
+      vocals.buffer = stemBuffers.vocals;
+      vocals.connect(singer);
+      const instrumental = context.createBufferSource();
+      instrumental.buffer = stemBuffers.instrumental;
+      instrumental.connect(bus);
+      instrumental.onended = () => void finish(playerName);
+      sources.push(vocals, instrumental);
+    } else {
+      const source = context.createBufferSource();
+      source.buffer = buffer;
+      source.connect(bus);
+      source.onended = () => void finish(playerName);
+      sources.push(source);
+    }
+    // O mesmo `start` no mesmo relógio: as trilhas ficam em sincronia entre si e com a letra.
+    for (const source of sources) source.start(startTime);
+    sourcesRef.current = sources;
+    setPlayingStems(stemBuffers !== null);
+
+    const recorder = createRecorder({ context, stream, startTime, latency, monitorGain: monitorGain(monitorVolume) });
     recorderRef.current = recorder;
     voiceFramesRef.current = recorder.frames;
 
@@ -477,6 +763,7 @@ export function KaraokeSession({ song }: { song: SongDto }) {
         <span className="ct-label">Karaokê</span>
         <h1>{song.title}</h1>
         <p className="text-fg-2">{song.artist}</p>
+        <span className="ct-badge justify-self-start">{DIFFICULTY_LABEL[difficulty]}</span>
       </header>
 
       {phase.kind === "loading-audio" ? <LoadingBlock title="Carregando a música" hint="Procurando o áudio neste dispositivo." /> : null}
@@ -530,6 +817,12 @@ export function KaraokeSession({ song }: { song: SongDto }) {
           {phase.notice ? <Alert tone={phase.notice.tone} title={phase.notice.title} body={phase.notice.body} /> : null}
           <PlayerNameField value={name} onChange={setName} />
           <OffsetField value={offsetMs} onChange={changeOffset} aligned={aligned} />
+          <MonitorField value={monitorVolume} onChange={changeMonitorVolume} />
+          <SingerVolumeField value={singerVolume} onChange={changeSingerVolume} status={stemsStatus} playingStems={null} />
+          <SecondOutputField value={secondOutputId} onChange={setSecondOutputId} />
+          <p className="ct-field__hint">
+            Nível {DIFFICULTY_LABEL[difficulty].toLowerCase()}: {DIFFICULTY_DESCRIPTION[difficulty]} Para trocar, volte à música.
+          </p>
           <button
             type="button"
             className="ct-btn ct-btn--primary ct-btn--start ct-btn--block"
@@ -566,13 +859,21 @@ export function KaraokeSession({ song }: { song: SongDto }) {
                 </div>
               </div>
               <div className="ct-hud__item text-right">
-                <span className="ct-label">Afinação</span>
+                <span className="ct-label">{easy ? "Ritmo" : "Afinação"}</span>
                 <span className="ct-hud__value ct-neon-cyan">{accuracy === null ? "--" : `${Math.round(accuracy * 100)}%`}</span>
               </div>
             </div>
             <div className="ct-highway">
               <div className="ct-highway__lane">
-                {reference ? <PitchCanvas reference={reference} voiceFrames={voiceFramesRef} getTimeMs={getTimeMs} running={onStage} /> : null}
+                {reference ? (
+                  <PitchCanvas
+                    reference={reference}
+                    voiceFrames={voiceFramesRef}
+                    getTimeMs={getTimeMs}
+                    running={onStage}
+                    mode={easy ? "activity" : "pitch"}
+                  />
+                ) : null}
               </div>
               <div className="ct-highway__hitline" />
               {hit ? (
@@ -593,7 +894,11 @@ export function KaraokeSession({ song }: { song: SongDto }) {
             <LyricsView lines={lines} currentIndex={hud.lineIndex} progress={hud.progress} />
           </div>
           <div className="ct-panel grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
-            <OffsetField value={offsetMs} onChange={changeOffset} aligned={aligned} />
+            <div className="grid gap-4">
+              <OffsetField value={offsetMs} onChange={changeOffset} aligned={aligned} />
+              <MonitorField value={monitorVolume} onChange={changeMonitorVolume} />
+              <SingerVolumeField value={singerVolume} onChange={changeSingerVolume} status={stemsStatus} playingStems={playingStems} />
+            </div>
             <div className="flex flex-wrap gap-3">
               <button type="button" className="ct-btn ct-btn--secondary" onClick={() => void finish(normalizePlayerName(name))}>
                 Terminar
@@ -618,7 +923,7 @@ export function KaraokeSession({ song }: { song: SongDto }) {
               setPhase({ kind: "ready", notice: null });
             }}
           />
-          <RankingList items={phase.ranking} highlightId={phase.result.id} />
+          <RankingList items={phase.ranking} difficulty={phase.result.difficulty} highlightId={phase.result.id} />
         </section>
       ) : null}
 

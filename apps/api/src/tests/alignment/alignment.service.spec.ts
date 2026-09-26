@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { ALIGNMENT_CONFIG, alignmentService } from "../../services/alignment.service.js";
+import { ALIGNMENT_CONFIG, FORCED_CONFIG, alignmentService } from "../../services/alignment.service.js";
+import { median } from "../../utils/pitch.js";
 import type { LyricLine } from "../../utils/validators.js";
-import { delay, jitterLines, makeMelody, randomNotes, scaleLines, shiftLines, silence } from "../helpers/tracks.js";
+import { delay, forcedFrom, jitterLines, makeMelody, makeTrack, randomNotes, scaleLines, shiftLines, silence } from "../helpers/tracks.js";
 
 const SONG_MS = 60_000;
 const melody = makeMelody(42, SONG_MS);
@@ -22,7 +23,7 @@ describe("alignmentService.align", () => {
   it("letra já em cima da referência não muda (shift 0, todas encaixadas)", () => {
     const result = alignmentService.align(lines, track);
 
-    expect(result).toEqual({ aligned: true, shiftMs: 0, matchedRatio: 1, lines });
+    expect(result).toEqual({ aligned: true, shiftMs: 0, matchedRatio: 1, method: "onset", lines });
   });
 
   it.each([
@@ -99,6 +100,7 @@ describe("alignmentService.align", () => {
       aligned: false,
       shiftMs: 0,
       matchedRatio: 0,
+      method: "onset",
       lines: null,
     });
   });
@@ -173,5 +175,179 @@ describe("alignmentService.align", () => {
     expect(result.aligned).toBe(true);
     expect(result.shiftMs).toBe(-2_000);
     expect(elapsed).toBeLessThan(200);
+  });
+});
+
+// ─── Alinhamento forçado (sdd-010) ───────────────────────────────────────────
+
+function round3(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+describe("alignmentService.align — alinhamento forçado (sdd-010)", () => {
+  it("letra deslocada volta exatamente para onde o worker ouviu cada linha", () => {
+    const result = alignmentService.align(shiftLines(lines, 9_000), track, forcedFrom(lines));
+
+    expect(result).toEqual({ aligned: true, shiftMs: -9_000, matchedRatio: 1, method: "forced", lines });
+  });
+
+  it("alinha mesmo sem nenhuma pausa na referência (o que derrotava o método por pausas)", () => {
+    const continuous = makeTrack(new Array<number | null>(SONG_MS / 10).fill(60));
+    expect(alignmentService.align(shiftLines(lines, 3_000), continuous).aligned).toBe(false);
+
+    const result = alignmentService.align(shiftLines(lines, 3_000), continuous, forcedFrom(lines));
+
+    expect(result.aligned).toBe(true);
+    expect(result.method).toBe("forced");
+    expect(result.lines).toEqual(lines);
+  });
+
+  it("linha com score abaixo de 0,4 é recusada e recebe o deslocamento da vizinha aceita anterior", () => {
+    const input = shiftLines(lines, 2_000);
+    const forced = forcedFrom(lines, { jitter: 300, seed: 3, scores: { 4: 0.39, 9: FORCED_CONFIG.minLineScore } });
+
+    const result = alignmentService.align(input, track, forced);
+    const aligned = result.lines ?? [];
+
+    expect(result.aligned).toBe(true);
+    expect(result.matchedRatio).toBe(round3((lines.length - 1) / lines.length));
+    const delta3 = (forced.lines[3]?.startMs ?? 0) - (input[3]?.startMs ?? 0);
+    expect(aligned[4]?.startMs).toBe((input[4]?.startMs ?? 0) + delta3);
+    for (let i = 0; i < lines.length; i++) {
+      if (i === 4) continue;
+      expect(aligned[i]?.startMs).toBe(forced.lines[i]?.startMs); // aceitas ficam onde o worker ouviu
+    }
+  });
+
+  it("linha 'cantada' por mais de 20 s é recusada", () => {
+    const forced = forcedFrom(lines, { durations: { 2: FORCED_CONFIG.maxLineDurationMs + 20, 5: FORCED_CONFIG.maxLineDurationMs } });
+
+    const result = alignmentService.align(shiftLines(lines, 1_000), track, forced);
+
+    expect(result.matchedRatio).toBe(round3((lines.length - 1) / lines.length));
+    expect(result.lines).toEqual(lines); // recusada herda o deslocamento (uniforme) da vizinha
+  });
+
+  it("menos da metade das linhas aceitas → aligned false, method forced e sem linhas", () => {
+    const half = Math.ceil(lines.length / 2) + 1;
+    const drop = Array.from({ length: half }, (_, i) => i * 2).filter((i) => i < lines.length);
+    const lowScore = alignmentService.align(lines, track, forcedFrom(lines, { score: 0.2 }));
+    const dropped = alignmentService.align(lines, track, forcedFrom(lines, { drop }));
+
+    expect(lowScore).toEqual({ aligned: false, shiftMs: 0, matchedRatio: 0, method: "forced", lines: null });
+    expect(dropped.aligned).toBe(false);
+    expect(dropped.method).toBe("forced");
+    expect(dropped.lines).toBeNull();
+    expect(dropped.matchedRatio).toBeLessThan(FORCED_CONFIG.minMatchedRatio);
+  });
+
+  it("linhas recusadas no começo usam o deslocamento da próxima aceita", () => {
+    const input = shiftLines(lines, 5_000);
+    const forced = forcedFrom(lines, { drop: [0, 1], jitter: 200, seed: 11 });
+
+    const aligned = alignmentService.align(input, track, forced).lines ?? [];
+
+    const delta2 = (forced.lines[2]?.startMs ?? 0) - (input[2]?.startMs ?? 0);
+    expect(aligned[0]?.startMs).toBe((input[0]?.startMs ?? 0) + delta2);
+    expect(aligned[1]?.startMs).toBe((input[1]?.startMs ?? 0) + delta2);
+  });
+
+  it("linha instrumental recebe o deslocamento da vizinha, mantém o texto vazio e não conta", () => {
+    const instrumental: LyricLine = { startMs: (lines[3]?.startMs ?? 0) + 700, text: "" };
+    const truth = [...lines.slice(0, 4), instrumental, ...lines.slice(4)];
+    const input = shiftLines(truth, 2_000);
+
+    const result = alignmentService.align(input, track, forcedFrom(truth));
+
+    expect(result.matchedRatio).toBe(1);
+    expect(result.shiftMs).toBe(-2_000);
+    expect(result.lines?.[4]).toEqual(instrumental);
+    expect(result.lines?.length).toBe(truth.length);
+  });
+
+  it("linha recusada nunca empurra a aceita seguinte", () => {
+    const forced = forcedFrom(lines, { drop: [3] });
+    const early = (lines[3]?.startMs ?? 0) + 100; // o worker ouviu a linha 4 logo depois de onde a 3 estava
+    forced.lines[4] = { index: 4, startMs: early, endMs: early + 2_000, score: 0.9 };
+
+    const aligned = alignmentService.align(lines, track, forced).lines ?? [];
+
+    expect(aligned[4]?.startMs).toBe(early);
+    expect(aligned[3]?.startMs).toBe(early - FORCED_CONFIG.minLineGapMs);
+    for (let i = 1; i < aligned.length; i++) {
+      expect((aligned[i]?.startMs ?? 0) - (aligned[i - 1]?.startMs ?? 0)).toBeGreaterThanOrEqual(FORCED_CONFIG.minLineGapMs);
+    }
+  });
+
+  it("ordem crescente com ≥ 200 ms entre linhas mesmo quando o worker colou duas", () => {
+    const forced = forcedFrom(lines);
+    const glued = lines[2]?.startMs ?? 0;
+    forced.lines[3] = { index: 3, startMs: glued, endMs: glued + 500, score: 0.8 };
+
+    const aligned = alignmentService.align(lines, track, forced).lines ?? [];
+
+    expect(aligned[2]?.startMs).toBe(glued);
+    expect(aligned[3]?.startMs).toBe(glued + FORCED_CONFIG.minLineGapMs);
+  });
+
+  it("shiftMs é a mediana arredondada de (alinhado − original) das linhas aceitas", () => {
+    const input = shiftLines(lines, 4_000);
+    const forced = forcedFrom(lines, { jitter: 300, seed: 5 });
+    const deltas = forced.lines.map((line, i) => (line.startMs ?? 0) - (input[i]?.startMs ?? 0));
+
+    const result = alignmentService.align(input, track, forced);
+
+    expect(result.shiftMs).toBe(Math.round(median(deltas)));
+    expect(Number.isInteger(result.shiftMs)).toBe(true);
+  });
+
+  it("alinhamento do worker com tamanho diferente da letra → cai no método por pausas", () => {
+    const result = alignmentService.align(shiftLines(lines, 3_000), track, forcedFrom(lines.slice(1)));
+
+    expect(result.method).toBe("onset");
+    expect(result.aligned).toBe(true);
+    expect(result.shiftMs).toBe(-3_000);
+  });
+
+  it("forced null ou ausente → método por pausas", () => {
+    expect(alignmentService.align(lines, track, null).method).toBe("onset");
+    expect(alignmentService.align(lines, track, undefined).method).toBe("onset");
+  });
+
+  it("worker não alinhou nenhuma linha → aligned false, method forced", () => {
+    const result = alignmentService.align(lines, track, forcedFrom(lines, { drop: lines.map((_, i) => i) }));
+
+    expect(result).toEqual({ aligned: false, shiftMs: 0, matchedRatio: 0, method: "forced", lines: null });
+  });
+
+  it("letra só com linhas vazias → aligned false, method forced", () => {
+    const empty = lines.map((line) => ({ ...line, text: "" }));
+    expect(alignmentService.align(empty, track, forcedFrom(empty)).aligned).toBe(false);
+  });
+
+  it("nunca sai dos limites do áudio", () => {
+    const forced = forcedFrom(lines);
+    const last = lines.length - 1;
+    forced.lines[last] = { index: last, startMs: SONG_MS + 5_000, endMs: SONG_MS + 6_000, score: 0.9 };
+
+    const aligned = alignmentService.align(lines, track, forced).lines ?? [];
+
+    expect(aligned[last]?.startMs).toBe(SONG_MS);
+    for (const line of aligned) {
+      expect(line.startMs).toBeGreaterThanOrEqual(0);
+      expect(line.startMs).toBeLessThanOrEqual(SONG_MS);
+    }
+  });
+
+  it("é determinístico e não altera a entrada", () => {
+    const input = shiftLines(lines, 3_000);
+    const forced = forcedFrom(lines, { jitter: 200, seed: 9, drop: [2] });
+    const snapshot = structuredClone({ input, forced });
+
+    const first = alignmentService.align(input, track, forced);
+    const second = alignmentService.align(input, track, forced);
+
+    expect(second).toEqual(first);
+    expect({ input, forced }).toEqual(snapshot);
   });
 });

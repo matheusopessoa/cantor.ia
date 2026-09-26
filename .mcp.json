@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "cantor": {
+      "command": "node",
+      "args": ["apps/mcp/node_modules/tsx/dist/cli.mjs", "apps/mcp/src/server.ts"]
+    }
+  }
+}

@@ -112,6 +112,8 @@
 .ct-hit--perfect { color: var(--hit-perfect); text-shadow: 0 0 10px var(--hit-perfect); }
 .ct-hit--good    { color: var(--hit-good);    text-shadow: 0 0 10px var(--hit-good); }
 .ct-hit--miss    { color: var(--hit-miss);    text-shadow: 0 0 10px var(--hit-miss); }
+/* Fácil (sem afinação): cantou no lugar certo → "On time", na cor do Perfect */
+.ct-hit--ontime  { color: var(--hit-perfect); text-shadow: 0 0 10px var(--hit-perfect); }
 
 /* ── HUD (barra superior durante a música) ─────────────────────── */
 .ct-hud {
@@ -199,7 +201,7 @@
 .ct-grade[data-grade="C"] { --grade: var(--grade-c); }
 .ct-grade[data-grade="D"] { --grade: var(--grade-d); }
 
-/* Medidor de LED (subnotas: afinação, tempo). --value de 0 a 1, 10 segmentos */
+/* Medidor de LED (subnotas: afinação, tempo, ritmo). --value de 0 a 1, 10 segmentos */
 .ct-meter { display: grid; gap: var(--space-2); }
 .ct-meter__head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); }
 .ct-meter__bar {
@@ -214,6 +216,7 @@
 }
 .ct-meter--pitch  .ct-meter__bar { --meter-color: var(--neon-cyan); }
 .ct-meter--timing .ct-meter__bar { --meter-color: var(--neon-pink); }
+.ct-meter--rhythm .ct-meter__bar { --meter-color: var(--fret-green); }
 
 /* ── Ranking de fliperama (HIGH SCORES) ────────────────────────── */
 .ct-ranking {

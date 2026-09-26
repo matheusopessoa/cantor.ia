@@ -1,19 +1,37 @@
 import { InvalidReferenceError } from "../utils/errors.js";
 import { findOnset, fold12, median } from "../utils/pitch.js";
-import type { LyricLine, PitchTrack } from "../utils/validators.js";
+import type { Difficulty, LyricLine, PitchTrack } from "../utils/validators.js";
+
+/** Limiares de afinação e pesos de um nível (sdd-009). */
+export interface DifficultyLevel {
+  pitch: {
+    /** Erro até aqui (em cents) vale acerto cheio. */
+    fullCreditCents: number;
+    /** A partir daqui o frame vale zero; entre os dois, crédito linear. */
+    zeroCreditCents: number;
+  };
+  /** Somam 1. `total = pitch·afinação + timing·tempo + rhythm·ritmo`. */
+  weights: { pitch: number; timing: number; rhythm: number };
+}
 
 /**
  * Constantes de calibração da nota. Centralizadas para o ajuste manual previsto em
- * `specs/sdd-002-scoring/tasks.md` §7 (gravações reais: boa ≥ 7, ruim ≤ 4).
+ * `specs/sdd-002-scoring/tasks.md` §7 (gravações reais: boa ≥ 7, ruim ≤ 4). Os limiares de
+ * afinação e os pesos variam por nível (`levels`, sdd-009); o resto vale para os três.
  */
 export const SCORING_CONFIG = {
-  weights: { pitch: 0.7, timing: 0.3 },
+  /** Nível usado quando a chamada não informa um (comportamento dos clientes antigos). */
+  defaultDifficulty: "HARD" as Difficulty,
+  levels: {
+    /** Meio semitom de folga; afinação e tempo pesam igual. */
+    HARD: { pitch: { fullCreditCents: 50, zeroCreditCents: 100 }, weights: { pitch: 0.5, timing: 0.5, rhythm: 0 } },
+    /** Um semitom de folga; o ritmo passa a contar. */
+    MEDIUM: { pitch: { fullCreditCents: 100, zeroCreditCents: 200 }, weights: { pitch: 0.5, timing: 0.25, rhythm: 0.25 } },
+    /** Sem afinação: só letra no tempo e ritmo. A afinação é calculada, mas informativa. */
+    EASY: { pitch: { fullCreditCents: 100, zeroCreditCents: 200 }, weights: { pitch: 0, timing: 0.5, rhythm: 0.5 } },
+  } satisfies Record<Difficulty, DifficultyLevel>,
   pitch: {
-    /** Erro até aqui (em cents) vale acerto cheio. */
-    fullCreditCents: 50,
-    /** A partir daqui o frame vale zero; entre os dois, crédito linear. */
-    zeroCreditCents: 100,
-    /** Frames para cada lado onde se procura a melhor nota cantada (±150 ms). */
+    /** Frames para cada lado onde se procura a melhor nota cantada (±150 ms). Também é a folga do ritmo. */
     searchWindowFrames: 15,
     /** Abaixo desta cobertura, a afinação é reduzida proporcionalmente. */
     minCoverageForFullCredit: 0.6,
@@ -46,12 +64,19 @@ export interface LineResult {
 }
 
 export interface ScoreResult {
-  /** 0..10, 1 casa decimal. */
+  /** 0..10, 1 casa decimal, com os pesos do nível. */
   score: number;
-  /** 0..10, 1 casa decimal. */
+  /** 0..10, 1 casa decimal. Calculada em todos os níveis; no `EASY` não entra na nota. */
   pitchScore: number;
   /** 0..10, 1 casa decimal. */
   timingScore: number;
+  /**
+   * 0..10, 1 casa decimal: F1 entre a presença de voz cantada e a da referência com folga
+   * de ±150 ms (sdd-009). Calculado em todos os níveis; pesa no `EASY` e no `MEDIUM`.
+   */
+  rhythmScore: number;
+  /** Nível com que a nota foi calculada. */
+  difficulty: Difficulty;
   /** Transposição detectada em semitons, em [-6, 6). Ex.: -2 = cantou 2 semitons abaixo. */
   keyOffsetSemitones: number;
   /** Fração dos frames com voz na referência que tiveram voz cantada na janela de busca. */
@@ -67,6 +92,8 @@ export interface ScoreOptions {
    * é gravada sobre a própria referência, então as duas já compartilham a linha do tempo.
    */
   offsetMs?: number;
+  /** Nível da nota (sdd-009). Padrão `HARD`. */
+  difficulty?: Difficulty;
 }
 
 type Frames = readonly (number | null)[];
@@ -75,8 +102,9 @@ type Frames = readonly (number | null)[];
  * Nota de cantoria (0 a 10) a partir de duas curvas de pitch e das linhas da letra.
  *
  * Função pura e determinística, sem I/O. Algoritmo em `specs/sdd-002-scoring/tasks.md` §3:
- * afinação (módulo oitava, tom compensado, busca em janela local) pesa 70% e entrada no
- * tempo de cada linha pesa 30%.
+ * afinação (módulo oitava, tom compensado, busca em janela local), entrada no tempo de cada
+ * linha e ritmo (presença de voz nos lugares certos), combinados com os pesos do nível
+ * (`SCORING_CONFIG.levels`, `specs/sdd-009-difficulty-levels/tasks.md` §3).
  */
 export const scoringService = {
   score(
@@ -87,6 +115,8 @@ export const scoringService = {
   ): ScoreResult {
     const ref = reference.midi;
     const voice = sung.midi;
+    const difficulty = options.difficulty ?? SCORING_CONFIG.defaultDifficulty;
+    const level: DifficultyLevel = SCORING_CONFIG.levels[difficulty];
 
     if (!ref.some((value) => value !== null)) {
       throw new InvalidReferenceError();
@@ -100,8 +130,8 @@ export const scoringService = {
     // 2. Tom
     const keyOffset = detectKeyOffset(ref, voice, limit);
 
-    // 3–4. Afinação
-    const { pitch, coverage } = scorePitch(ref, voice, limit, keyOffset);
+    // 3–4. Afinação (limiares do nível) e cobertura
+    const { pitch, coverage } = scorePitch(ref, voice, limit, keyOffset, level.pitch);
 
     // 5. Entrada no tempo
     const { timing, lineResults } = scoreTiming(
@@ -112,14 +142,19 @@ export const scoringService = {
       options.offsetMs ?? 0,
     );
 
-    // 6. Nota final
-    const { weights } = SCORING_CONFIG;
-    const total = weights.pitch * pitch + weights.timing * timing;
+    // 6. Ritmo: a cobertura já é o recall; falta só a precisão.
+    const rhythm = scoreRhythm(ref, voice, limit, coverage);
+
+    // 7. Nota final com os pesos do nível
+    const { weights } = level;
+    const total = weights.pitch * pitch + weights.timing * timing + weights.rhythm * rhythm;
 
     return {
       score: toScore10(total),
       pitchScore: toScore10(pitch),
       timingScore: toScore10(timing),
+      rhythmScore: toScore10(rhythm),
+      difficulty,
       keyOffsetSemitones: round(keyOffset, 2),
       coverage: clamp01(coverage),
       lines: lineResults,
@@ -147,9 +182,10 @@ function scorePitch(
   voice: Frames,
   limit: number,
   keyOffset: number,
+  thresholds: DifficultyLevel["pitch"],
 ): { pitch: number; coverage: number } {
-  const { fullCreditCents, zeroCreditCents, searchWindowFrames, minCoverageForFullCredit } =
-    SCORING_CONFIG.pitch;
+  const { fullCreditCents, zeroCreditCents } = thresholds;
+  const { searchWindowFrames, minCoverageForFullCredit } = SCORING_CONFIG.pitch;
 
   let referenceVoiced = 0;
   let covered = 0;
@@ -189,6 +225,41 @@ function scorePitch(
   return { pitch: accuracy * coveragePenalty, coverage };
 }
 
+/**
+ * Ritmo (sdd-009): F1 entre "cantou onde a referência tem voz" (recall = `coverage`, que a
+ * afinação já calculou com a mesma folga de ±150 ms) e "a referência tem voz onde cantou"
+ * (precisão). Uma varredura em O(n) sobre a voz, com soma acumulada da referência.
+ * Independe do tom: falar a letra no lugar certo vale 1; cantar sem parar vale a fração de
+ * voz da referência; ficar calado vale 0.
+ */
+function scoreRhythm(ref: Frames, voice: Frames, limit: number, recall: number): number {
+  if (recall <= 0 || limit === 0) return 0;
+
+  const { searchWindowFrames } = SCORING_CONFIG.pitch;
+
+  // voicedBefore[i] = nº de frames da referência com voz em [0, i)
+  const voicedBefore = new Uint32Array(ref.length + 1);
+  for (let i = 0; i < ref.length; i++) {
+    voicedBefore[i + 1] = (voicedBefore[i] ?? 0) + (ref[i] == null ? 0 : 1);
+  }
+
+  let sungVoiced = 0;
+  let matched = 0;
+  for (let j = 0; j < limit; j++) {
+    if (voice[j] == null) continue;
+    sungVoiced++;
+    const from = Math.max(0, j - searchWindowFrames);
+    const to = Math.min(ref.length, j + searchWindowFrames + 1);
+    if ((voicedBefore[to] ?? 0) - (voicedBefore[from] ?? 0) > 0) matched++;
+  }
+
+  if (sungVoiced === 0) return 0;
+  const precision = matched / sungVoiced;
+  if (precision <= 0) return 0;
+
+  return (2 * recall * precision) / (recall + precision);
+}
+
 function scoreTiming(
   ref: Frames,
   voice: Frames,
@@ -226,11 +297,14 @@ function scoreTiming(
     const referenceVoiced = countVoiced(ref, startFrame, endFrame);
     if (referenceVoiced === 0) continue; // sem voz na referência (instrumental)
 
+    // O onset mais próximo do instante da linha, não o primeiro da janela: o rabo da linha
+    // anterior chega aqui com falhas curtas de detecção que também parecem "inícios".
     const onsetFrame = findOnset(
       voice,
       Math.round((current.startMs - zeroCreditMs) / hopMs),
       Math.round((current.startMs + zeroCreditMs) / hopMs),
       minOnsetFrames,
+      Math.round(current.startMs / hopMs),
     );
     const onsetDeltaMs = onsetFrame === null ? null : onsetFrame * hopMs - current.startMs;
     const onsetScore = onsetDeltaMs === null ? 0 : ramp(Math.abs(onsetDeltaMs), fullCreditMs, zeroCreditMs);
