@@ -29,8 +29,9 @@
 - **Inclui**
   - App `apps/worker` em Python 3.12 gerenciado com `uv` (`pyproject.toml` + `uv.lock`).
   - FastAPI com `GET /health` e `POST /extract` (multipart, campo `file`).
-  - Pipeline: decodificar (ffmpeg) → mono 44.1 kHz → Demucs `htdemucs` (stem `vocals`) →
-    reamostrar para 16 kHz → torchcrepe (hop 10 ms) → limiar de periodicidade → MIDI por frame.
+  - Pipeline: decodificar (ffmpeg) → estéreo 44.1 kHz → Demucs `htdemucs` (stem `vocals`, média
+    para mono) → torchcrepe **`tiny`** (reamostra para 16 kHz, hop 10 ms, decoder `weighted_viterbi`
+    próprio) → limiar de periodicidade e de volume → MIDI por frame.
   - Arquivo temporário apagado em `finally` (o áudio nunca é persistido).
   - Limites: 20 MB por arquivo, 10 min de duração, formatos que o ffmpeg decodifica
     (mp3, wav, m4a, ogg, flac).
@@ -90,7 +91,7 @@
                       ▼
                    separation.vocals (se separate=true)
                       ▼
-                   pitch.track (16 kHz, hop 10 ms, torchcrepe "full", decoder viterbi)
+                   pitch.track (16 kHz, hop 10 ms, torchcrepe "tiny", decoder weighted_viterbi)
                       ▼
                    periodicidade < 0.5 ou RMS < gate → null
                       ▼
@@ -227,7 +228,7 @@
 | Risco | Probabilidade | Impacto | Mitigação |
 |---|---|---|---|
 | R1. `demucs` (pacote original) está sem manutenção ativa e pode não instalar com torch/Python recentes | média | alto | Fixar Python 3.12 e as versões de torch/torchaudio compatíveis no `uv.lock`. Plano B: pacote `audio-separator` com o mesmo modelo `htdemucs` |
-| R2. torchcrepe `full` lento demais em CPU | média | médio | Trocar para o modelo `tiny` (≈10x mais rápido) e revalidar os critérios. Registrar a escolha no README |
+| R2. torchcrepe `full` lento demais em CPU | **ocorreu** | — | **Aplicado**: modelo `tiny` (benchmark abaixo). Registrado no README do worker |
 | R3. Imagem Docker grande (torch + pesos ≈ 2–3 GB) | alta | baixo | Usar wheel de torch só para CPU (`--index-url .../cpu`) e build multi-stage |
 | R4. Backing vocals / coro contaminam a curva | média | médio | Aceito no MVP. Viterbi + limiar de periodicidade reduzem o efeito. Documentar |
 | R5. Direitos autorais e termos do YouTube (baixar viola os termos) | alta | médio (projeto pessoal) | Uso pessoal e não comercial (decisão do usuário, 2026-09-25). Áudio só em tmp e apagado em `finally`, coberto por teste. Não expor publicamente sem rever |
@@ -239,6 +240,61 @@ Dependências (versões a confirmar com a skill `latest-deps` na implementação
 `numpy`, `soundfile`, `yt-dlp`; dev: `pytest`, `httpx`, `matplotlib`. Binários: `ffmpeg` e
 `deno` (Homebrew no dev, instalados no Dockerfile).
 
+### Decisões da implementação (2026-09-25)
+
+- **Crepe `tiny`, fixo.** O usuário cogitou uma opção "melhor (full) × mais rápida (tiny)" no
+  front. O benchmark mostrou que não há ganho de qualidade no `full`, então ficou só o `tiny`,
+  sem opção (decisão do usuário).
+
+  | Medida | `tiny` | `full` |
+  |---|---|---|
+  | Voz sintética (40 notas A2–A5, harmônicos + vibrato): erro mediano / p90 | 6,1 / 16,1 cents | 6,3 / 15,7 cents |
+  | Sintética: frames dentro de 50 cents · erros de oitava | 100% · 0% | 100% · 0% |
+  | Sintética: voz falsa nas pausas | 6% | 19% |
+  | Voz real (30 s isolados): tempo · pico de RAM · frames com voz | 3,0 s · 2,2 GB · 70,5% | 63,4 s · 8,7 GB · 77,1% |
+  | Voz real: full × tiny onde os dois têm voz | mediana 5 cents, 0,1% > 50 cents, 0 oitavas | |
+  | Música inteira (3:33): crepe · total com Demucs | 33 s · ~1,5 min | 355 s · ~6,8 min |
+
+  Os frames extras do `full` são quase todos bordas de nota (95% dos trechos ≤ 50 ms).
+- **Decoder `weighted_viterbi` próprio.** O `viterbi` do torchcrepe 0.0.24 devolve o centro do
+  bin (20 cents), o que reprovava o critério de ±10 cents na senoide. O decoder novo usa o
+  viterbi para escolher o bin e a média ponderada de ±4 bins para a precisão.
+- **`batch_size=256` no crepe.** Com 2048, o processo morria por falta de memória (exit 137).
+- **`tool.uv.environments` = Mac ARM + Linux.** Sem isso, o `demucs` 4.1 força `torch<2.3` por
+  causa do Mac Intel, e o `torchaudio` novo não carrega.
+- **`torch` só-CPU no Linux** (índice `download.pytorch.org/whl/cpu`): tira as dependências CUDA
+  da imagem (R3).
+- **R1 não ocorreu:** o `demucs` voltou a ser mantido (4.1.0, com `huggingface-hub` e `sphn`).
+- **Dependência de runtime JS:** o `yt-dlp` usa o `deno` do PATH (instalado no Dockerfile).
+- **`.gitignore` local** em `apps/worker/` para os artefatos Python, em vez de mexer no da raiz.
+- **Dockerfile em 3 estágios** (`base` → `deps` → `runtime`). O `sphn` (dependência do `demucs`)
+  não tem wheel para Linux ARM, que é o que o Docker gera em Mac Apple Silicon: o estágio `deps`
+  compila com Rust + `libopus-dev` + `pkg-config`, e o `runtime` copia só o `.venv` (e leva a
+  `libopus0`). Em x86_64 o wheel vem pronto. `.dockerignore` tira testes, scripts e `.venv`.
+- **Timeout do download cancela a thread de verdade** (achado da revisão). O `asyncio.wait_for`
+  não para a thread do `yt-dlp`, que recriaria o tmp e deixaria o áudio no disco (regra 2). Agora
+  um `threading.Event` é checado no `progress_hook` (levanta `DownloadCancelled`) e o tmp é limpo
+  de novo quando a thread termina. Teste de regressão confirmado: falha sem o cancelamento.
+- **Áudio do YouTube > 20 MB → `too_large`** (antes saía `too_long`).
+- **Imagem: 3,24 GB** (R3 dentro do previsto). Container testado: `/health` ok, música de 3:33
+  em 76 s pelo `/youtube/extract`, `/youtube/audio` ok, tmp vazio, ~1 GB de RAM em repouso.
+
+### Resultado dos critérios (2026-09-25)
+
+| Critério (seção 6) | Resultado |
+|---|---|
+| Senoide 440 Hz ≥ 95% em [68.9, 69.1] | ok (com `weighted_viterbi`) |
+| Silêncio → tudo `null` e 422 | ok |
+| Glissando 220→440 monotônico, ~57 → ~69 | ok |
+| `len(midi) == round(durationMs/10)` ±1 | ok |
+| Música real de ~4 min em ≤ 3 min | ok: 3:33 em 72 s de ponta a ponta |
+| Curva segue a voz, não o instrumental | ok em 1 música (Lá♭ maior, faixa de barítono 56–63, vibrato visível). Faltam as outras 2 do critério, a fazer no smoke da sdd-003 |
+| Nada sobra no tmp (sucesso, erro, `/youtube/audio` após o envio) | ok (testes + checagem manual) |
+| `/health` < 100 ms durante extração | ok: ~1 ms |
+| `videoId` inválido → 400 sem chamar o yt-dlp | ok |
+| `/youtube/audio` fora do semáforo | ok |
+| Smoke real: `/youtube/extract` e `/youtube/audio` | ok (m4a, 3,4 MB em 2,5 s). Tocar no Chrome/Safari fica para a sdd-004 |
+
 ## 9. Perguntas em Aberto (bloqueantes)
 _Nenhuma._
 
@@ -248,6 +304,6 @@ _Nenhuma._
 - [x] Seção 6 (Critérios de Aceitação) preenchida de forma substantiva.
 - [x] Sem mudança em schema Prisma. Contrato `PitchTrack` definido aqui e reutilizado em sdd-002/003/004.
 - [x] Perguntas em aberto foram exauridas.
-- [ ] Na implementação: atualizar `AGENTS.md` §1 (comandos `uv sync`, `uv run fastapi dev app/main.py`,
-      `uv run pytest`), §2, §4 e §11 (incluindo `yt-dlp`, `ffmpeg` e `deno`), e adicionar
-      `__pycache__/`, `.venv/`, `.pytest_cache/` ao `.gitignore`.
+- [x] Na implementação: `AGENTS.md` atualizado (introdução, §1 com `uv sync` /
+      `uv run uvicorn` / `uv run pytest`, §2, §4, §11 e §12). Artefatos Python num `.gitignore`
+      local em `apps/worker/`. Serviço `worker` no `docker-compose.yml` (sem porta pública no prod).

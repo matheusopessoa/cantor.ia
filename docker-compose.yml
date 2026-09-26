@@ -14,3 +14,11 @@ services:
       dockerfile: apps/web/Dockerfile
     ports:
       - "3000:3000"
+
+  # Extração de pitch (Python). Sem variáveis de ambiente no MVP. A porta fica exposta só
+  # para desenvolvimento; a API fala com ele por http://worker:8000 (entra na sdd-003).
+  worker:
+    build:
+      context: apps/worker
+    ports:
+      - "8000:8000"

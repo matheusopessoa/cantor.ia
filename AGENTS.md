@@ -4,11 +4,13 @@ Fonte de verdade para o Claude (e qualquer agente de IA) que trabalha neste repo
 Em caso de divergência entre este arquivo e o código, **o código prevalece** — valide no código
 e proponha a correção aqui.
 
-Monorepo pnpm (Node.js/TypeScript) com dois workspaces:
+Monorepo pnpm (Node.js/TypeScript) com dois workspaces e um app Python fora do pnpm:
 
 - `apps/api` — backend Fastify + Prisma (Postgres), validação com Zod, testes com Vitest.
 - `apps/web` — frontend Next.js 16 (App Router) + React 19 + Tailwind CSS 4, com design system
   próprio em `apps/web/DESIGN_SYSTEM/`.
+- `apps/worker` — serviço Python 3.12 (FastAPI + `uv`) que extrai a curva de pitch da voz de uma
+  música (arquivo ou YouTube). Não tem `package.json`, então o pnpm o ignora.
 
 ---
 
@@ -30,6 +32,9 @@ Monorepo pnpm (Node.js/TypeScript) com dois workspaces:
 | `pnpm --filter api db:migrate` | Cria/aplica migration Prisma em dev (`prisma migrate dev`). | Mudança em `prisma/schema.prisma`. |
 | `pnpm --filter api db:generate` | Regenera o Prisma Client (saída em `apps/api/src/generated/prisma`). | Após alterar o schema. |
 | `pnpm --filter api db:studio` | Abre o Prisma Studio. | Inspeção manual dos dados. |
+| `uv sync` (em `apps/worker`) | Cria o `.venv` e instala as dependências do worker. Requer `ffmpeg` e `deno` no PATH (`brew install ffmpeg deno`). | Primeira vez ou após mudar `pyproject.toml`. |
+| `uv run uvicorn app.main:app --reload --port 8000` (em `apps/worker`) | Roda o worker em dev. O primeiro start baixa os pesos do Demucs. | Desenvolvimento local do worker. |
+| `uv run pytest` (em `apps/worker`) | Suíte do worker, sem rede e sem Demucs (~5 s). `-m slow` roda o Demucs; `-m network` baixa do YouTube. | Antes de commit/PR que toca `apps/worker`. |
 
 > A API hoje **não tem lint configurado** (`apps/api` não tem ESLint). Se uma tarefa adicionar
 > lint à API, documente o comando nesta tabela.
@@ -45,6 +50,9 @@ Monorepo pnpm (Node.js/TypeScript) com dois workspaces:
   [`apps/api/docs/arquitetura.md`](apps/api/docs/arquitetura.md).
 - **`apps/web`**: Next.js App Router (`app/`), estilizado com Tailwind 4 e os tokens/componentes
   de `apps/web/DESIGN_SYSTEM/`.
+- **`apps/worker`**: FastAPI stateless, sem banco. Pipeline ffmpeg → Demucs (`htdemucs`, voz) →
+  torchcrepe (`tiny`, 10 ms) → `PitchTrack`. O áudio só existe no tmp da requisição. Só a API
+  fala com ele. Contrato em `specs/sdd-001-worker-pitch/tasks.md` e em `apps/worker/README.md`.
 
 | Camada | Onde vive | Responsabilidade |
 |---|---|---|
@@ -56,6 +64,7 @@ Monorepo pnpm (Node.js/TypeScript) com dois workspaces:
 | Config | `apps/api/src/config/` | Variáveis de ambiente validadas com Zod (`env.ts`) e CORS (`cors.ts`). |
 | App Router | `apps/web/app/` | Páginas e layouts do Next.js. |
 | Design System | `apps/web/DESIGN_SYSTEM/` | Tokens (cores, tipografia, espaçamento) e componentes reutilizáveis da UI. |
+| Worker | `apps/worker/app/` | `main.py` (rotas, erros, semáforo), `audio.py` (ffmpeg), `separation.py` (Demucs), `pitch.py` (crepe), `youtube.py` (yt-dlp). |
 
 ---
 
@@ -100,18 +109,24 @@ cantor.ia/
 │   │   ├── vitest.config.ts
 │   │   ├── .env.test            # env da suíte de testes (sem segredos reais)
 │   │   └── Dockerfile
-│   └── web/
+│   ├── web/
 │       ├── app/                 # layout.tsx, page.tsx, globals.css
 │       ├── lib/                 # env.public.ts (browser), env.server.ts (server-only)
 │       ├── DESIGN_SYSTEM/       # cantor.ia Design System: readme.md, styles.css, tokens/, components/, DESIGN_SYSTEM.html
 │       ├── public/
 │       ├── AGENTS.md            # avisos sobre a versão do Next.js
 │       └── Dockerfile
+│   └── worker/                  # Python 3.12 + uv (fora do pnpm)
+│       ├── app/                 # main, audio, separation, pitch, youtube, schemas, errors
+│       ├── tests/               # pytest (conftest com sinais sintéticos e yt-dlp falso)
+│       ├── scripts/plot_track.py
+│       ├── pyproject.toml / uv.lock
+│       └── Dockerfile
 ├── .env.example                 # catálogo versionado de todas as variáveis (sem segredos)
 ├── .env                         # valores locais, ignorado pelo Git (pnpm env:init)
 ├── scripts/
 │   └── env-init.mjs             # cria o .env e gera os segredos
-├── docker-compose.yml           # base (api + web)
+├── docker-compose.yml           # base (api + web + worker)
 ├── docker-compose.dev.yml       # db de desenvolvimento + env de dev de api/web
 ├── docker-compose.test.yml      # db isolado de testes (porta 5433)
 ├── docker-compose.prod.yml
@@ -271,6 +286,12 @@ essa pasta, para o Claude Code registrar as skills como comandos (`/code-planner
 | `tailwindcss` | ^4 | Estilos do frontend | `apps/web/app/globals.css`, `postcss.config.mjs` |
 | `server-only` | ^0.0.1 | Impede importar código de servidor em Client Components | `apps/web/lib/env.server.ts` |
 | `postgres` (Docker) | 15-alpine | Banco de dados (dev e test) | `docker-compose.dev.yml`, `docker-compose.test.yml` |
+| `fastapi` / `uvicorn` | 0.141 / 0.54 | Servidor HTTP do worker | `apps/worker/app/main.py` |
+| `demucs` | 4.1 | Isola a voz (modelo `htdemucs`) | `apps/worker/app/separation.py` |
+| `torch` / `torchaudio` | 2.14 / 2.11 | Runtime dos modelos | `apps/worker/pyproject.toml` (só Mac ARM e Linux em `tool.uv.environments`) |
+| `torchcrepe` | 0.0.24 | Pitch da voz (modelo `tiny`) | `apps/worker/app/pitch.py` |
+| `yt-dlp` | 2026.8.19 | Baixa o áudio do YouTube (projeto pessoal, não comercial) | `apps/worker/app/youtube.py` |
+| `ffmpeg` / `deno` (binários) | — | Decodificar áudio / runtime JS exigido pelo `yt-dlp` | Homebrew no dev, `apps/worker/Dockerfile` |
 
 ### Variáveis de ambiente
 
@@ -319,7 +340,7 @@ de teste. Plano de referência: `specs/sdd-006-env-config/tasks.md`.
 
 - **Repositório**: cantor.ia — `github.com/matheusopessoa/cantor.ia`.
 - **Gerenciador de pacotes**: pnpm 10.24.0, workspaces em `apps/*`.
-- **Apps**: `api` (v1.0.0), `web` (v0.1.0) — ainda sem releases/tags publicadas.
+- **Apps**: `api` (v1.0.0), `web` (v0.1.0), `worker` (v0.1.0) — ainda sem releases/tags publicadas.
 - **Squad/owners/maintainers**: _(preencher — não há esse dado no repositório hoje)_.
 - **Infra**: Docker Compose para dev (`docker-compose.dev.yml`), testes
   (`docker-compose.test.yml`) e produção (`docker-compose.prod.yml`); `nginx.conf` presente na
