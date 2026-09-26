@@ -1,10 +1,13 @@
+# Variáveis vêm do .env da raiz (crie com `corepack pnpm env:init`). Cada serviço recebe só
+# o que é dele em `environment:` — não usar `env_file:`, que empurraria o .env inteiro.
+# Endereços entre containers (db, api) são definidos aqui, não no .env.
 services:
   db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?rode corepack pnpm env:init}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?rode corepack pnpm env:init}
+      POSTGRES_DB: ${POSTGRES_DB:?rode corepack pnpm env:init}
     ports:
       - "5432:5432"
     volumes:
@@ -18,12 +21,21 @@ services:
   api:
     environment:
       NODE_ENV: dev
-      DATABASE_URL: "${DATABASE_URL}"
-      EMAIL_BINDEX_SECRET: "${EMAIL_BINDEX_SECRET}"
-      JWT_SIGN_SECRET: "${JWT_SIGN_SECRET}"
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?schema=public
+      JWT_SIGN_SECRET: ${JWT_SIGN_SECRET:?rode corepack pnpm env:init}
+      EMAIL_BINDEX_SECRET: ${EMAIL_BINDEX_SECRET:?rode corepack pnpm env:init}
     depends_on:
       db:
         condition: service_healthy
+
+  web:
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3333}
+    environment:
+      API_INTERNAL_URL: http://api:3333
+    depends_on:
+      - api
 
 volumes:
   db_data:

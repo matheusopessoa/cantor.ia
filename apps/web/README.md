@@ -1,5 +1,19 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Variáveis de ambiente
+
+O web não tem `.env` próprio: o `next.config.ts` lê o `.env` da raiz do monorepo (crie com
+`pnpm env:init` na raiz) e copia só as chaves abaixo. Leia sempre por `lib/env.public.ts` ou
+`lib/env.server.ts`, nunca `process.env` direto.
+
+| Variável | Onde | Observação |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | browser (`publicEnv.apiUrl`) | Embutida no bundle no `next build`: mudar exige rebuild. No Docker, é build arg. Nunca coloque segredo aqui. |
+| `API_INTERNAL_URL` | servidor (`serverEnv.apiInternalUrl`) | Opcional; sem ela usa `NEXT_PUBLIC_API_URL`. No compose é `http://api:3333`. |
+
+Para adicionar uma variável ao web: inclua a chave em `WEB_ENV_KEYS` (`next.config.ts`), no
+módulo de leitura certo, no `.env.example` da raiz e no compose.
+
 ## Getting Started
 
 First, run the development server:

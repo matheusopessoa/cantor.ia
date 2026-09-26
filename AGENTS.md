@@ -17,7 +17,9 @@ Monorepo pnpm (Node.js/TypeScript) com dois workspaces:
 | Comando | Descrição | Quando usar |
 |---|---|---|
 | `pnpm install` | Instala dependências de todos os workspaces (raiz + `apps/*`). | Primeira vez ou após mudanças em dependências. |
-| `docker compose -f docker-compose.dev.yml up -d` | Sobe o Postgres de desenvolvimento (`db`, porta 5432). | Antes de rodar a API localmente. |
+| `pnpm env:init` | Cria o `.env` da raiz a partir do `.env.example` e gera os `*_SECRET`. Nunca sobrescreve um `.env` existente. | Primeira vez no projeto. |
+| `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db` | Sobe o Postgres de desenvolvimento (`db`, porta 5432) com os valores do `.env` da raiz. | Antes de rodar a API localmente. |
+| `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build` | Sobe db + api + web em containers. | Testar o stack completo em Docker. |
 | `pnpm --filter api dev` | Roda a API em watch mode (`tsx watch src/server.ts`, porta 3333). Mata antes qualquer processo na 3333. | Desenvolvimento local da API. |
 | `pnpm --filter web dev` | Roda o Next.js em dev (porta 3000). | Desenvolvimento local do web. |
 | `pnpm --filter api build` | Compila a API (`tsc`). | Validação de build / CI. |
@@ -86,7 +88,7 @@ cantor.ia/
 │   │   │   ├── routes/          # auth.routes.ts, health.routes.ts
 │   │   │   ├── utils/           # prisma.ts, hash.ts, bindex.ts, validators.ts, errors.ts, error-handler.ts
 │   │   │   ├── generated/       # Prisma Client gerado (ignorado pelo Git)
-│   │   │   ├── tests/           # auth/, healthcheck/, helpers/, setup.ts, global-setup.ts
+│   │   │   ├── tests/           # auth/, config/, healthcheck/, helpers/, setup.ts, global-setup.ts
 │   │   │   ├── app.ts
 │   │   │   └── server.ts
 │   │   ├── prisma/
@@ -100,18 +102,24 @@ cantor.ia/
 │   │   └── Dockerfile
 │   └── web/
 │       ├── app/                 # layout.tsx, page.tsx, globals.css
+│       ├── lib/                 # env.public.ts (browser), env.server.ts (server-only)
 │       ├── DESIGN_SYSTEM/       # cantor.ia Design System: readme.md, styles.css, tokens/, components/, DESIGN_SYSTEM.html
 │       ├── public/
 │       ├── AGENTS.md            # avisos sobre a versão do Next.js
 │       └── Dockerfile
+├── .env.example                 # catálogo versionado de todas as variáveis (sem segredos)
+├── .env                         # valores locais, ignorado pelo Git (pnpm env:init)
+├── scripts/
+│   └── env-init.mjs             # cria o .env e gera os segredos
 ├── docker-compose.yml           # base (api + web)
-├── docker-compose.dev.yml       # db de desenvolvimento
+├── docker-compose.dev.yml       # db de desenvolvimento + env de dev de api/web
 ├── docker-compose.test.yml      # db isolado de testes (porta 5433)
 ├── docker-compose.prod.yml
 ├── pnpm-workspace.yaml          # packages: apps/*
 ├── specs/
 │   ├── tasks.txt
 │   └── sdd-<NNN>-<slug>/tasks.md
+├── .claude/skills               # link simbólico → ../.agents/skills (registro no Claude Code)
 └── .agents/skills/
     ├── code-planner/SKILL.md
     ├── code-implementer/SKILL.md
@@ -212,7 +220,9 @@ sequencial a partir do maior existente em `specs/`.
 
 ## 9. Skills de Automação
 
-As skills vivem em [`.agents/skills/`](.agents/skills/).
+As skills vivem em [`.agents/skills/`](.agents/skills/). `.claude/skills` é um link simbólico para
+essa pasta, para o Claude Code registrar as skills como comandos (`/code-planner`,
+`/code-reviewer` etc.). Edite sempre em `.agents/skills/`.
 
 | Skill | Quando usar |
 |---|---|
@@ -228,8 +238,9 @@ As skills vivem em [`.agents/skills/`](.agents/skills/).
 ## 10. Proibições Globais
 
 - Não versionar segredos, tokens, senhas, chaves de API ou `.env` (o `.gitignore` da raiz ignora
-  `.env*`, com exceção explícita de `apps/api/.env.test`, que é versionado para a suíte de testes —
-  não adicionar segredos reais a ele).
+  `.env*`, com exceção explícita de `.env.example`, o catálogo sem valores reais, e de
+  `apps/api/.env.test`, que é versionado para a suíte de testes — não adicionar segredos reais a
+  nenhum dos dois).
 - Não usar `README.md` como fonte de verdade; confirme regras no código e em `apps/api/docs/`.
 - Não commitar código sem testes.
 - Não ignorar lint/formatador sem justificar explicitamente.
@@ -258,19 +269,49 @@ As skills vivem em [`.agents/skills/`](.agents/skills/).
 | `next` | 16.2.10 | Framework do frontend | `apps/web/app/` |
 | `react` / `react-dom` | 19.2.4 | UI do frontend | `apps/web/app/` |
 | `tailwindcss` | ^4 | Estilos do frontend | `apps/web/app/globals.css`, `postcss.config.mjs` |
+| `server-only` | ^0.0.1 | Impede importar código de servidor em Client Components | `apps/web/lib/env.server.ts` |
 | `postgres` (Docker) | 15-alpine | Banco de dados (dev e test) | `docker-compose.dev.yml`, `docker-compose.test.yml` |
 
-**Variáveis de ambiente da API:**
+### Variáveis de ambiente
 
-| Variável | Uso | Validada em |
-|---|---|---|
-| `NODE_ENV` | `dev` \| `test` \| `prod` | `config/env.ts` |
-| `DATABASE_URL` | Conexão Postgres | `prisma.config.ts` / `utils/prisma.ts` |
-| `JWT_SIGN_SECRET` | Assinatura JWT | `config/env.ts` |
-| `EMAIL_BINDEX_SECRET` | Blind index de e-mail | `utils/bindex.ts` |
-| `CORS_ALLOWED_ORIGINS` | Lista de origens separadas por vírgula | `config/env.ts` |
-| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | Postgres de dev | `docker-compose.dev.yml` |
-| `PROD_DB_USER` / `PROD_DB_PASS` | Postgres de produção | `docker-compose.prod.yml` |
+**Onde ficam**: um único `.env` na raiz (ignorado pelo Git), criado com `pnpm env:init` a partir
+do catálogo versionado `.env.example`. Exceção: `apps/api/.env.test`, versionado, só com valores
+de teste. Plano de referência: `specs/sdd-006-env-config/tasks.md`.
+
+**Como chegam a cada app**:
+- API: `apps/api/src/config/env.ts` carrega o `.env` da raiz (exceto com `NODE_ENV=test`) e valida
+  com Zod. É o único arquivo de `src/` que lê `process.env` (exceções: `tests/`).
+- CLI do Prisma: `apps/api/prisma.config.ts` carrega o mesmo `.env` por caminho explícito.
+- Web: `apps/web/next.config.ts` copia do `.env` da raiz **só** as chaves do web; o código lê via
+  `lib/env.public.ts` (browser) e `lib/env.server.ts` (`server-only`).
+- Compose: cada serviço lista o que recebe em `environment:` (nunca `env_file:`); obrigatórias
+  com `${VAR:?mensagem}`. Endereços entre containers (`db`, `api`, `worker`) ficam no compose.
+
+**Convenção de nomes**:
+1. `SCREAMING_SNAKE_CASE`, sem abreviações (`POSTGRES_PASSWORD`, não `DB_PASS`).
+2. `<RECURSO>_<ATRIBUTO>`: o prefixo diz **o que** a variável descreve, não quem a lê
+   (`WORKER_URL` é o endereço do worker, lido pela API).
+3. Sufixo diz o tipo: `_URL` (absoluta, com esquema), `_SECRET` (≥ 32 caracteres, nunca logado),
+   plural para listas separadas por vírgula (`_ORIGINS`), `_MS` (duração), `_ENABLED` (`true`/`false`).
+4. O ambiente nunca vai no nome: o mesmo nome em dev, test e prod.
+5. Nomes impostos por ferramentas são mantidos: `NODE_ENV`, `DATABASE_URL`, `POSTGRES_*`, `NEXT_PUBLIC_*`.
+6. `NEXT_PUBLIC_` só para o que pode ir ao browser (é embutido no bundle no build).
+7. Só vai para env o que muda entre ambientes ou é segredo; limites e regras são constantes no código.
+8. Variável nova = schema do app + `.env.example` + compose (se roda em container) + esta tabela,
+   no mesmo commit.
+
+| Variável | Serviço | Obrigatória | Segredo | Lida/validada em |
+|---|---|---|---|---|
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` | db | sim | senha sim | `docker-compose.dev.yml` |
+| `DATABASE_URL` | api, CLI do Prisma | sim | sim | `config/env.ts`, `prisma.config.ts` |
+| `JWT_SIGN_SECRET` | api | sim | sim | `config/env.ts` |
+| `EMAIL_BINDEX_SECRET` | api | sim | sim (trocar invalida a busca de e-mails) | `config/env.ts` |
+| `CORS_ALLOWED_ORIGINS` | api | só em prod | não | `config/env.ts` |
+| `NEXT_PUBLIC_API_URL` | web (browser, build-time) | sim | **nunca** | `lib/env.public.ts` |
+| `API_INTERNAL_URL` | web (servidor) | não (padrão: `NEXT_PUBLIC_API_URL`) | não | `lib/env.server.ts` |
+
+`NODE_ENV` não fica no `.env`: é definido por processo (API: `dev` por padrão, `test` pelo
+`.env.test`, `prod` pelo compose; o Next define o dele).
 
 ---
 

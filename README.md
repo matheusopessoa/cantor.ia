@@ -9,10 +9,15 @@ Monorepo pnpm com:
 
 ```bash
 pnpm install
-docker compose -f docker-compose.dev.yml up -d   # Postgres de dev (porta 5432)
+pnpm env:init                                    # cria o .env da raiz e gera os segredos
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db   # Postgres de dev (porta 5432)
 pnpm --filter api dev                            # API em http://localhost:3333
 pnpm --filter web dev                            # Web em http://localhost:3000
 ```
+
+Todas as variáveis de ambiente ficam num único `.env` na raiz. O catálogo, com o que cada uma
+faz, é o [`.env.example`](.env.example); a convenção de nomes está em
+[`AGENTS.md` §11](AGENTS.md#11-dependências-externas).
 
 Testes e lint:
 

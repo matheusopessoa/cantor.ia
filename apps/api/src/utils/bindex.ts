@@ -1,13 +1,8 @@
 import { createHmac } from "node:crypto";
+import { env } from "../config/env.js";
 
 export function emailBindex(email: string): string {
-  const secret = process.env["EMAIL_BINDEX_SECRET"];
-
-  if (!secret) {
-    throw new Error("EMAIL_BINDEX_SECRET environment variable is not set");
-  }
-
   const normalized = email.trim().toLowerCase();
 
-  return createHmac("sha256", secret).update(normalized).digest("hex");
+  return createHmac("sha256", env.EMAIL_BINDEX_SECRET).update(normalized).digest("hex");
 }
