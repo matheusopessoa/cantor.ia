@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { lrclibClient, type LrclibTrack } from "../clients/lrclib.client.js";
 import {
   WorkerClientError,
@@ -5,6 +6,7 @@ import {
   type WorkerAudio,
   type WorkerExtraction,
   type WorkerLyricsInput,
+  type WorkerStemFiles,
   type WorkerStems,
   type WorkerYtmusicSong,
 } from "../clients/worker.client.js";
@@ -17,6 +19,7 @@ import {
   type SongLookup,
   type SongSummary,
 } from "../repositories/song.repository.js";
+import { stemsRepository, type StoredStem } from "../repositories/stems.repository.js";
 import {
   AudioProviderUnavailableError,
   ReferenceAlreadyProcessingError,
@@ -27,11 +30,12 @@ import {
   SongWithoutSyncedLyricsError,
   STEMS_AUDIO_REJECTIONS,
   StemsAudioRejectedError,
+  StemsNotStoredError,
   StemsUnavailableError,
   VideoMetadataUnavailableError,
   YoutubeSearchUnavailableError,
 } from "../utils/errors.js";
-import type { LyricLine, LyricsAlignment, LyricsEvidence, LyricsSelection, PitchTrack } from "../utils/validators.js";
+import type { LyricLine, LyricsAlignment, LyricsEvidence, LyricsSelection, PitchTrack, StemName } from "../utils/validators.js";
 import { parseLrc } from "../utils/lrc.js";
 import { alignmentService, type AlignmentResult } from "./alignment.service.js";
 import { lyricsSourceService } from "./lyrics-source.service.js";
@@ -106,6 +110,12 @@ export interface SongDto {
   lyricsAlignment: LyricsAlignment | null;
   /** De onde veio a letra (sdd-011); nulo nas músicas antigas e até a primeira `READY`. */
   lyricsSelection: LyricsSelection | null;
+  /**
+   * Chave das trilhas guardadas (voz e instrumental, sdd-016): com ela, o karaokê toca por
+   * `GET /:id/stems/{vocals,instrumental}` e o aparelho valida o cache por ela. Nulo sem trilhas
+   * (música anterior à sdd-016, não `READY`, ou gravar falhou): o web usa o fluxo da sdd-013.
+   */
+  stemsKey: string | null;
 }
 
 export interface CreateSongResult {
@@ -150,6 +160,7 @@ export function toSongDto(song: SongSummary): SongDto {
     alignedLyrics: song.alignedLyrics as LyricLine[] | null,
     lyricsAlignment: song.lyricsAlignment as LyricsAlignment | null,
     lyricsSelection: song.lyricsSelection as LyricsSelection | null,
+    stemsKey: song.stemsKey,
   };
 }
 
@@ -241,11 +252,35 @@ async function claim(id: string, youtubeVideoId: string | null, redo: boolean): 
   if (!song) throw new SongNotFoundError(id);
 
   const claimed = await songRepository.claimForProcessing(id, youtubeVideoId, { redo });
-  if (claimed) return song;
+  if (claimed) {
+    // O claim zerou a `stemsKey` (sdd-016): a pasta da referência anterior sai antes de a nova
+    // extração começar (melhor esforço; o que sobrar, a varredura do boot apaga).
+    if (song.stemsKey !== null) await stemsRepository.prune(song.id, null);
+    return song;
+  }
 
   const current = await songRepository.findById(id);
   if (current?.referenceStatus === "READY") throw new ReferenceAlreadyReadyError();
   throw new ReferenceAlreadyProcessingError();
+}
+
+/**
+ * Guarda as trilhas da referência (sdd-016) sob uma chave nova e a devolve; `null` se o disco
+ * recusou (cheio, sem permissão): a referência fica `READY` sem trilhas e o karaokê usa o
+ * fallback da sdd-013 (regra 4: as trilhas nunca derrubam a referência).
+ */
+async function storeStems(songId: string, files: WorkerStemFiles): Promise<string | null> {
+  const key = randomUUID();
+  try {
+    await stemsRepository.save(songId, key, files);
+    return key;
+  } catch (error) {
+    if (env.NODE_ENV !== "test") {
+      console.error(`[song.service] could not store the stems of song ${songId}:`, error);
+    }
+    await stemsRepository.prune(songId, null);
+    return null;
+  }
 }
 
 /**
@@ -255,7 +290,7 @@ async function claim(id: string, youtubeVideoId: string | null, redo: boolean): 
 async function runReference(song: SongSummary, extract: (lyrics: WorkerLyricsInput) => Promise<WorkerExtraction>): Promise<void> {
   try {
     const input = await lyricsInput(song);
-    const { track, alignment: forced, lyrics: selected, transcript } = await extract(input);
+    const { track, alignment: forced, lyrics: selected, transcript, stems } = await extract(input);
 
     if (Math.abs(track.durationMs - song.durationMs) > DURATION_TOLERANCE_MS) {
       await songRepository.markFailed(song.id, {
@@ -272,9 +307,13 @@ async function runReference(song: SongSummary, extract: (lyrics: WorkerLyricsInp
     // forçado do worker (sdd-010), ou pelas pausas da voz quando ele não veio (sdd-007).
     const alignment = alignmentService.align(lyrics, track, forced);
 
+    // As trilhas vão para o disco ANTES do `READY` (sdd-016): a chave só existe com os arquivos.
+    const stemsKey = stems ? await storeStems(song.id, stems) : null;
+
     await songRepository.markReady(song.id, {
       referenceTrack: track,
       referenceAudioMs: track.durationMs,
+      stemsKey,
       ...toAlignmentData(alignment),
       ...(selected
         ? {
@@ -456,7 +495,8 @@ export const songService = {
   async startReference(id: string, audio: Buffer, filename: string, { redo = false }: ReferenceOptions = {}): Promise<ReferenceStarted> {
     const song = await claim(id, null, redo);
 
-    void runReference(song, (lyrics) => workerClient.extract(audio, filename, lyrics));
+    // Com as trilhas (sdd-016): a música por arquivo enviado também toca pelas trilhas guardadas.
+    void runReference(song, (lyrics) => workerClient.extract(audio, filename, lyrics, { stems: true }));
 
     return { status: "PROCESSING" };
   },
@@ -465,9 +505,23 @@ export const songService = {
   async startReferenceFromYoutube(id: string, videoId: string, { redo = false }: ReferenceOptions = {}): Promise<YoutubeReferenceStarted> {
     const song = await claim(id, videoId, redo);
 
-    void runReference(song, (lyrics) => workerClient.extractFromYoutube(videoId, lyrics));
+    void runReference(song, (lyrics) => workerClient.extractFromYoutube(videoId, lyrics, { stems: true }));
 
     return { status: "PROCESSING", youtubeVideoId: videoId };
+  },
+
+  /**
+   * Uma trilha guardada (sdd-016), em streaming do disco. Só música `READY` com `stemsKey`;
+   * arquivo que sumiu da pasta também é `STEMS_NOT_STORED` (404): o web cai no fallback.
+   */
+  async getStem(id: string, stem: StemName): Promise<StoredStem> {
+    const song = await songRepository.findById(id);
+    if (!song) throw new SongNotFoundError(id);
+    if (song.referenceStatus !== "READY" || song.stemsKey === null) throw new StemsNotStoredError();
+
+    const stored = await stemsRepository.open(id, song.stemsKey, stem);
+    if (!stored) throw new StemsNotStoredError();
+    return stored;
   },
 
   /** Áudio para tocar: baixado do YouTube a cada chamada e repassado em streaming (regra 13). */

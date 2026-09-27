@@ -7,6 +7,11 @@ services:
       dockerfile: apps/api/Dockerfile
     ports:
       - "3333:3333"
+    environment:
+      # Trilhas guardadas (sdd-016): a pasta precisa sobreviver ao container (volume abaixo).
+      SONG_STEMS_DIR: /data/stems
+    volumes:
+      - ./.data/stems:/data/stems
 
   web:
     build:
@@ -24,5 +29,7 @@ services:
     environment:
       # Opcional (sdd-014): transcrição pela OpenAI (`whisper-1`); vazia usa o Whisper local.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Device dos modelos (sdd-016): no container (Linux) `auto` resolve `cpu`.
+      WORKER_DEVICE: ${WORKER_DEVICE:-auto}
     ports:
       - "8000:8000"

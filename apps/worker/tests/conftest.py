@@ -7,15 +7,17 @@ import pytest
 import soundfile as sf
 from fastapi.testclient import TestClient
 
-from app import config, main
+from app import config, device, main
 from app.audio import SAMPLE_RATE
 
 
 @pytest.fixture(autouse=True)
 def no_openai_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """A suíte nunca usa a `OPENAI_API_KEY` do `.env` de dev (sdd-014): sem rede e sem gasto.
-    Quem testa o provedor da OpenAI configura a chave falsa explicitamente."""
-    monkeypatch.setattr(config, "settings", lambda: config.Settings(OPENAI_API_KEY=None))
+    Quem testa o provedor da OpenAI configura a chave falsa explicitamente. O device fica em
+    `cpu` (sdd-016), para o resultado não depender da máquina; `test_device.py` testa o `auto`."""
+    monkeypatch.setattr(config, "settings", lambda: config.Settings(OPENAI_API_KEY=None, WORKER_DEVICE="cpu"))
+    monkeypatch.setattr(device, "_current", None)
 
 
 def sine(freq_hz: float, seconds: float, amp: float = 0.5) -> np.ndarray:

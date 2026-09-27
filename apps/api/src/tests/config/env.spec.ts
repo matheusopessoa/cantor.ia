@@ -27,6 +27,16 @@ describe("envSchema", () => {
     expect(keys.filter((key) => !(key in example))).toEqual([]);
   });
 
+  it("SONG_STEMS_DIR (sdd-016) tem padrão .data/stems na raiz do repo e sai sempre absoluto", () => {
+    const fallback = envSchema.safeParse(validEnv).data?.SONG_STEMS_DIR;
+    expect(fallback).toMatch(/^\/.*\/\.data\/stems$/);
+    expect(fallback).not.toContain("apps/api");
+
+    expect(envSchema.safeParse({ ...validEnv, SONG_STEMS_DIR: "/data/stems" }).data?.SONG_STEMS_DIR).toBe("/data/stems");
+    expect(envSchema.safeParse({ ...validEnv, SONG_STEMS_DIR: "pasta/minha" }).data?.SONG_STEMS_DIR).toMatch(/^\/.*\/pasta\/minha$/);
+    expect(issuePaths({ ...validEnv, SONG_STEMS_DIR: "" })).toEqual(["SONG_STEMS_DIR"]);
+  });
+
   it("aceita um ambiente de dev válido sem CORS_ALLOWED_ORIGINS", () => {
     const result = envSchema.safeParse(validEnv);
 

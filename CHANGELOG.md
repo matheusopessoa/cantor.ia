@@ -3,6 +3,75 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Cada app tem a
 própria versão (`apps/api`, `apps/web`, `apps/worker`, `apps/mcp`).
 
+## worker 0.7.0 — 2026-09-26
+
+Plano: [`specs/sdd-016-stems-once/tasks.md`](specs/sdd-016-stems-once/tasks.md). Preparação
+de uma música de 3:33 com a letra: **82 s → 48 s** neste Mac (M5), medido com
+`scripts/compare_devices.py`.
+
+### Adicionado
+- `stems: bool` no `POST /extract` (campo do multipart) e no `POST /youtube/extract` (JSON),
+  Etapa A: com `separate`, o Demucs roda **uma** vez (`separation.stems`), a voz mono do crepe,
+  do Whisper e do MMS_FA sai do mesmo stem, e a resposta vira `multipart/form-data` com
+  `result` (o JSON de sempre), `vocals` e `instrumental` (AAC `.m4a`, o formato do `/stems`),
+  em streaming do tmp da requisição, limpo depois do último byte. Sem `stems`, JSON como antes;
+  erros sempre em JSON. Custa ~3 s de AAC.
+- `WORKER_DEVICE` (`auto` | `cpu` | `mps`, padrão `auto`) e `app/device.py`, Etapa B: o Demucs
+  (`Separator(device=…)`) e o MMS_FA (modelo e entrada no device, emissões de volta na CPU)
+  rodam na GPU do Mac quando ela existe: Demucs 45,8 → 14,8 s, MMS_FA 9,6 → 5,3 s. O crepe
+  `tiny` fica em CPU (sem ganho medido) e o Whisper local também (ctranslate2). `mps` forçado
+  sem MPS derruba o boot com a mensagem, antes de carregar qualquer peso; no Docker (Linux)
+  `auto` resolve `cpu`. `GET /health` ganha `device`. Qualidade conferida numa música real:
+  a curva e o alinhamento em `mps` diferem dos de `cpu` tanto quanto duas rodadas em `cpu`
+  diferem entre si (o Demucs usa um deslocamento aleatório por rodada): afinação igual em
+  99,96 % dos frames com voz, voz/sem-voz em 96,9 % (97,0 % entre duas rodadas em CPU).
+  Tabela no README do worker.
+- `scripts/compare_devices.py`: a mesma música em `cpu` e em `mps`, tempo por etapa e
+  comparação da curva e do alinhamento.
+
+## api 2.4.0 — 2026-09-26
+
+Plano: [`specs/sdd-016-stems-once/tasks.md`](specs/sdd-016-stems-once/tasks.md) (Etapa A). O
+Demucs roda **uma vez** por música: a preparação já devolve as trilhas de voz e instrumental, a
+API as guarda numa pasta local e o karaokê toca direto delas. Cai a regra 13 da sdd-003 ("o
+servidor não guarda áudio"): o **original** continua não guardado, mas as trilhas ficam em
+`SONG_STEMS_DIR` (padrão `.data/stems` na raiz, ignorada pelo Git; ~5–8 MB por música). Decisão
+do usuário em 2026-09-26: o projeto roda numa máquina só. Tudo aditivo.
+
+### Adicionado
+- `Song.stemsKey` (migration `20260926213233_song_stems_key`) e `SongDto.stemsKey`: chave da
+  pasta das trilhas da referência atual; nula sem trilhas.
+- `GET /api/songs/:id/stems/vocals` e `GET /api/songs/:id/stems/instrumental`: cada trilha
+  como `audio/mp4` em streaming do disco, com `Content-Length`. 400 trilha ou id inválidos;
+  404 música; 404 `STEMS_NOT_STORED` (sem chave, não `READY`, ou arquivo sumiu).
+- `repositories/stems.repository.ts`: a pasta local (`<dir>/<songId>/<stemsKey>/`), único
+  módulo que toca o disco: `save` (`.part` + `rename`), `open`, `prune`, `sweep`.
+- `SONG_STEMS_DIR` (`.env.example`, compose: volume `./.data/stems:/data/stems`).
+- `workerClient.extract*` aceitam `{ stems: true }` e leem a resposta multipart do worker
+  (`WorkerExtraction.stems`).
+
+### Mudado
+- `runReference` pede as trilhas ao worker, grava na pasta **antes** do `READY` e a `stemsKey`
+  vai na mesma escrita da curva. Gravar que falha deixa `READY` sem trilhas (nunca `FAILED`).
+  Claim, `markFailed` e `failOrphanedProcessing` zeram a chave; o claim apaga a pasta da
+  referência anterior; o boot varre pastas órfãs depois do `failOrphanedProcessing`.
+- Música por arquivo enviado passa a tocar pelas trilhas guardadas (antes não servia áudio).
+- `POST /api/songs/:id/stems` (sdd-013) continua igual, como fallback das músicas antigas.
+
+## web 0.8.0 — 2026-09-26
+
+Plano: [`specs/sdd-016-stems-once/tasks.md`](specs/sdd-016-stems-once/tasks.md) (Etapa A).
+
+### Mudado
+- Tela de cantar: música com `stemsKey` toca **só** pelas trilhas guardadas: do cache do
+  aparelho (registro com a mesma `stemsKey` em `lib/stems-store.ts`) ou de
+  `GET /:id/stems/{vocals,instrumental}`, baixadas em paralelo com o progresso somado
+  (`lib/download-progress.ts`). Nada do YouTube é baixado, o worker não é chamado e o slider
+  "Voz do cantor" já nasce habilitado. "Clique em Cantar → pronto" na primeira vez num aparelho
+  cai de download + separação (1–2 min, mais a fila do worker) para os dois GETs locais.
+  Sem `stemsKey`, ou se a API responder 404, o fluxo da sdd-013 segue inalterado.
+- `api.downloadSongAudio` e `api.downloadStems` compartilham o mesmo leitor em chunks.
+
 ## worker 0.6.1 — 2026-09-26
 
 ### Corrigido

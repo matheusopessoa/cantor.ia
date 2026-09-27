@@ -18,7 +18,7 @@ import { formatDuration, formatOffset } from "@/lib/format";
 import { currentLineIndex, effectiveLyrics, lineProgress } from "@/lib/lyrics";
 import { MONITOR_MAX, MONITOR_MIN, MONITOR_STEP, monitorGain } from "@/lib/monitor-volume";
 import { SINGER_MAX, SINGER_MIN, SINGER_STEP, singerGain, stemsMatchOriginal } from "@/lib/singer-volume";
-import { getSongStems, saveSongStems, type SongStems } from "@/lib/stems-store";
+import { getSongStems, saveSongStems, separatedStemsValid, storedStemsValid, type SongStems } from "@/lib/stems-store";
 import { createSecondOutput, type SecondOutput } from "@/lib/music-output";
 import { OFFSET_MAX_MS, OFFSET_MIN_MS, OFFSET_STEP_MS, normalizeOffsetMs } from "@/lib/lyrics-offset";
 import {
@@ -62,9 +62,10 @@ interface Hud {
 }
 
 /**
- * Trilhas separadas (voz e instrumental, sdd-013) desta música neste aparelho: `idle` antes
- * de o áudio estar pronto, `preparing` enquanto o worker separa (1–2 min, só na primeira
- * vez), `ready` com as duas em cache, `failed` quando não deu (a música toca como o original).
+ * Trilhas separadas (voz e instrumental) desta música neste aparelho: `ready` com as duas em
+ * mãos (as guardadas no servidor, sdd-016, já chegam prontas), `idle` antes de o áudio estar
+ * pronto, `preparing` enquanto o worker separa o áudio do browser (fallback da sdd-013, 1–2 min,
+ * só na primeira vez), `failed` quando não deu (a música toca como o original).
  */
 type StemsStatus = "idle" | "preparing" | "ready" | "failed";
 
@@ -246,6 +247,26 @@ async function decodeStems(context: AudioContext, stems: SongStems, originalMs: 
   }
 }
 
+/**
+ * As trilhas guardadas no servidor (sdd-016) são a própria música: sem original para comparar,
+ * as duas precisam ter a mesma duração entre si (±100 ms) e a da letra (±10 s, como o áudio
+ * baixado). `null` quando alguma não decodifica ou não bate.
+ */
+async function decodeStoredStems(context: AudioContext, stems: SongStems, songMs: number): Promise<{ buffers: StemBuffers; durationMs: number } | null> {
+  try {
+    const [vocals, instrumental] = await Promise.all([
+      context.decodeAudioData(await stems.vocals.arrayBuffer()),
+      context.decodeAudioData(await stems.instrumental.arrayBuffer()),
+    ]);
+    const vocalsMs = Math.round(vocals.duration * 1000);
+    const instrumentalMs = Math.round(instrumental.duration * 1000);
+    if (!stemsMatchOriginal(vocalsMs, instrumentalMs, instrumentalMs) || !durationMatches(instrumentalMs, songMs)) return null;
+    return { buffers: { vocals, instrumental }, durationMs: instrumentalMs };
+  } catch {
+    return null;
+  }
+}
+
 interface SingerVolumeFieldProps {
   value: number;
   onChange: (value: number) => void;
@@ -407,7 +428,7 @@ export function KaraokeSession({ song }: { song: SongDto }) {
 
       const cached = await getSongStems(song.id);
       if (controller.signal.aborted) return;
-      if (cached && cached.sourceSize === blob.size) {
+      if (separatedStemsValid(cached, blob.size)) {
         stemsRef.current = cached;
         setStemsStatus("ready");
         return;
@@ -456,6 +477,29 @@ export function KaraokeSession({ song }: { song: SongDto }) {
     [song.durationMs, prepareStems],
   );
 
+  /**
+   * As trilhas guardadas no servidor (sdd-016) são a música: sem original. Confere a duração
+   * pelo instrumental (regra 4, como o áudio baixado) e deixa a sessão pronta com o slider
+   * "Voz do cantor" já valendo. `false` quando não bate: a tela cai no fluxo da sdd-013.
+   */
+  const acceptStoredStems = useCallback(
+    async (stems: SongStems, signal: AbortSignal): Promise<boolean> => {
+      setPhase({ kind: "checking-duration" });
+      const audioMs = await readAudioDurationMs(stems.instrumental);
+      if (!mountedRef.current || signal.aborted) return true;
+      if (audioMs !== null && !durationMatches(audioMs, song.durationMs)) return false;
+
+      audioRef.current = null;
+      stemsRef.current = stems;
+      setStemsStatus("ready");
+      durationRef.current = audioMs ?? song.durationMs;
+      setDurationMs(durationRef.current);
+      setPhase({ kind: "ready", notice: null });
+      return true;
+    },
+    [song.durationMs],
+  );
+
   useEffect(() => {
     mountedRef.current = true;
     // Cancela as requisições desta montagem ao desmontar (inclui o duplo mount do Strict Mode
@@ -463,7 +507,40 @@ export function KaraokeSession({ song }: { song: SongDto }) {
     const controller = new AbortController();
     const { signal } = controller;
 
+    let lastUpdate = 0;
+    const reportProgress = (loaded: number, total: number | null) => {
+      const now = performance.now();
+      if (signal.aborted || (now - lastUpdate < PROGRESS_THROTTLE_MS && loaded !== total)) return;
+      lastUpdate = now;
+      setPhase({ kind: "downloading-audio", loaded, total });
+    };
+
+    /**
+     * Música com trilhas no servidor (sdd-016): do cache do aparelho com a mesma chave, senão
+     * os dois GETs de trilha. `true` quando a sessão ficou pronta (ou foi cancelada); `false`
+     * quando o servidor não as tem mais ou algo não bateu: segue para o fluxo da sdd-013.
+     */
+    const loadStoredStems = async (stemsKey: string): Promise<boolean> => {
+      const cached = await getSongStems(song.id);
+      if (signal.aborted) return true;
+      if (cached && storedStemsValid(cached, stemsKey)) return acceptStoredStems(cached, signal);
+
+      setPhase({ kind: "downloading-audio", loaded: 0, total: null });
+      try {
+        const { vocals, instrumental } = await api.downloadStems(song.id, reportProgress, signal);
+        if (signal.aborted) return true;
+        const stems: SongStems = { vocals, instrumental, stemsKey };
+        await saveSongStems(song.id, stems);
+        return acceptStoredStems(stems, signal);
+      } catch {
+        return signal.aborted;
+      }
+    };
+
     const loadAudio = async () => {
+      if (song.stemsKey !== null && (await loadStoredStems(song.stemsKey))) return;
+      if (signal.aborted) return;
+
       const cached = await getSongAudio(song.id);
       if (signal.aborted) return;
       if (cached) {
@@ -473,18 +550,8 @@ export function KaraokeSession({ song }: { song: SongDto }) {
 
       if (song.youtubeVideoId) {
         setPhase({ kind: "downloading-audio", loaded: 0, total: null });
-        let lastUpdate = 0;
         try {
-          const blob = await api.downloadSongAudio(
-            song.id,
-            (loaded, total) => {
-              const now = performance.now();
-              if (signal.aborted || (now - lastUpdate < PROGRESS_THROTTLE_MS && loaded !== total)) return;
-              lastUpdate = now;
-              setPhase({ kind: "downloading-audio", loaded, total });
-            },
-            signal,
-          );
+          const blob = await api.downloadSongAudio(song.id, reportProgress, signal);
           if (signal.aborted) return;
           await saveSongAudio(song.id, blob);
           await acceptAudio(blob, "download", signal);
@@ -517,7 +584,7 @@ export function KaraokeSession({ song }: { song: SongDto }) {
       stemsAbortRef.current?.abort();
       teardown();
     };
-  }, [song.id, song.youtubeVideoId, acceptAudio, teardown]);
+  }, [song.id, song.youtubeVideoId, song.stemsKey, acceptAudio, acceptStoredStems, teardown]);
 
   const changeMonitorVolume = (value: number) => {
     setMonitorVolume(value);
@@ -633,7 +700,9 @@ export function KaraokeSession({ song }: { song: SongDto }) {
   /** "Começar": gesto do usuário que libera o AudioContext e pede o microfone. */
   const begin = async () => {
     const blob = audioRef.current;
-    if (!blob || !referenceRef.current || !isValidPlayerName(name)) return;
+    // Sem original em mãos, a música são as trilhas guardadas no servidor (sdd-016).
+    const storedStems = blob === null ? stemsRef.current : null;
+    if ((!blob && !storedStems) || !referenceRef.current || !isValidPlayerName(name)) return;
     const playerName = normalizePlayerName(name);
     commitName(playerName);
     offsetRef.current = offsetMs;
@@ -671,10 +740,21 @@ export function KaraokeSession({ song }: { song: SongDto }) {
       return;
     }
 
-    let buffer: AudioBuffer | null;
+    let buffer: AudioBuffer | null = null;
+    let stemBuffers: StemBuffers | null = null;
+    let decodedMs: number;
     try {
       await loadCaptureWorklet(context);
-      buffer = await context.decodeAudioData(await blob.arrayBuffer());
+      if (blob) {
+        buffer = await context.decodeAudioData(await blob.arrayBuffer());
+        decodedMs = Math.round(buffer.duration * 1000);
+      } else {
+        // Só as trilhas do servidor (sdd-016): a duração da rodada é a do instrumental.
+        const decoded = storedStems ? await decodeStoredStems(context, storedStems, song.durationMs) : null;
+        if (!decoded) throw new Error("stored stems could not be decoded");
+        stemBuffers = decoded.buffers;
+        decodedMs = decoded.durationMs;
+      }
     } catch {
       for (const track of stream.getTracks()) track.stop();
       teardown();
@@ -687,7 +767,6 @@ export function KaraokeSession({ song }: { song: SongDto }) {
       return;
     }
 
-    const decodedMs = Math.round(buffer.duration * 1000);
     if (!durationMatches(decodedMs, song.durationMs)) {
       for (const track of stream.getTracks()) track.stop();
       teardown();
@@ -697,10 +776,13 @@ export function KaraokeSession({ song }: { song: SongDto }) {
     durationRef.current = decodedMs;
     setDurationMs(decodedMs);
 
-    // Trilhas separadas (sdd-013): decodificadas no mesmo contexto; fora da duração do original
-    // ou com falha, a rodada toca o original. Prontas no meio de uma rodada valem na próxima.
-    const stems = stemsRef.current;
-    const stemBuffers = stems ? await decodeStems(context, stems, decodedMs) : null;
+    // Trilhas separadas do áudio do browser (sdd-013): decodificadas no mesmo contexto; fora da
+    // duração do original ou com falha, a rodada toca o original. Prontas no meio de uma rodada
+    // valem na próxima. Com as trilhas do servidor, já vieram decodificadas acima.
+    if (buffer) {
+      const stems = stemsRef.current;
+      stemBuffers = stems ? await decodeStems(context, stems, decodedMs) : null;
+    }
     if (!mountedRef.current || contextRef.current !== context) {
       for (const track of stream.getTracks()) track.stop();
       teardown();

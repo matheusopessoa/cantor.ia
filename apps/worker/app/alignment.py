@@ -15,6 +15,7 @@ import torch
 import torchaudio.functional as F
 from torchaudio.pipelines import MMS_FA
 
+from app import device
 from app.audio import SAMPLE_RATE
 from app.schemas import Alignment, LineAlignment, LyricsLine
 
@@ -39,10 +40,11 @@ _STAR_ID = _DICTIONARY[STAR]
 
 
 def load() -> None:
-    """Carrega os pesos do MMS_FA uma vez (lifespan do FastAPI). Baixa ~1,2 GB na primeira vez."""
+    """Carrega os pesos do MMS_FA uma vez (lifespan do FastAPI), no device de `app/device.py`
+    (sdd-016). Baixa ~1,2 GB na primeira vez."""
     global _model
     if _model is None:
-        _model = MMS_FA.get_model(with_star=True)
+        _model = MMS_FA.get_model(with_star=True).to(device.resolve())
 
 
 def is_loaded() -> bool:
@@ -65,10 +67,13 @@ def emissions(mono: np.ndarray) -> torch.Tensor:
 
     Reamostra para 16 kHz e roda o modelo em janelas de `CHUNK_S` sem sobreposição; cada
     janela perde no máximo 1 frame na borda, então `T ≈ duração / 20 ms`. A coluna do `*`
-    recebe `STAR_LOG_PROB` fixo (ver o comentário da constante).
+    recebe `STAR_LOG_PROB` fixo (ver o comentário da constante). Só o modelo roda no device
+    (sdd-016): a entrada vai para lá janela a janela e as emissões voltam para a CPU, onde o
+    `forced_align` roda.
     """
     load()
     assert _model is not None
+    target = device.resolve()
     wav = torch.from_numpy(np.ascontiguousarray(mono, dtype=np.float32))
     wav = F.resample(wav, SAMPLE_RATE, MODEL_SAMPLE_RATE)
     chunk = CHUNK_S * MODEL_SAMPLE_RATE
@@ -79,8 +84,8 @@ def emissions(mono: np.ndarray) -> torch.Tensor:
             piece = wav[start:start + chunk]
             if piece.numel() < min_samples:
                 piece = torch.nn.functional.pad(piece, (0, min_samples - piece.numel()))
-            emission, _ = _model(piece[None])
-            outputs.append(emission[0])
+            emission, _ = _model(piece[None].to(target))
+            outputs.append(emission[0].cpu())
     log_probs = torch.cat(outputs).float()
     log_probs[:, _STAR_ID] = STAR_LOG_PROB
     return log_probs

@@ -201,6 +201,12 @@ async function readJson<T>(response: Response, path: string, schema: z.ZodType<T
   return parsed.data;
 }
 
+/** As duas trilhas em AAC (`.m4a`) que vêm com a extração quando ela pede `stems` (sdd-016). */
+export interface WorkerStemFiles {
+  vocals: Buffer;
+  instrumental: Buffer;
+}
+
 /**
  * Resultado de `POST /extract` e `POST /youtube/extract`: a curva, o alinhamento da letra
  * (sdd-010) e, quando foram candidatas, a letra escolhida (sdd-011; o alinhamento é sobre ela).
@@ -213,6 +219,13 @@ export interface WorkerExtraction {
   lyrics: SelectedLyrics | null;
   /** As palavras do Whisper (sdd-012); `null` quando a letra foi enviada pronta. */
   transcript: TranscriptWord[] | null;
+  /** Voz e instrumental da mesma passada do Demucs (sdd-016); `null` quando não foram pedidas. */
+  stems: WorkerStemFiles | null;
+}
+
+export interface WorkerExtractOptions {
+  /** Pede as trilhas junto com a curva (sdd-016): a resposta vira `multipart/form-data`. */
+  stems?: boolean;
 }
 
 /** Resultado de `POST /youtube/align` (sdd-012): a letra atual e a proposta sobre a mesma voz. */
@@ -234,9 +247,60 @@ const alignResponseSchema = z.object({
   proposed: forcedAlignmentSchema.nullable(),
 });
 
+function parseExtraction(body: unknown, path: string, stems: WorkerStemFiles | null): WorkerExtraction {
+  const parsed = extractResponseSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new WorkerClientError("invalid_response", `worker answered ${path} with an invalid ExtractResponse`);
+  }
+  const { alignment, lyrics, transcript, ...track } = parsed.data;
+  return { track, alignment, lyrics, transcript, stems };
+}
+
+async function stemPart(form: FormData, name: keyof WorkerStemFiles, path: string): Promise<Buffer> {
+  const part = form.get(name);
+  if (!(part instanceof Blob) || part.size === 0) {
+    throw new WorkerClientError("invalid_response", `worker answered ${path} without a non-empty "${name}" part`);
+  }
+  return Buffer.from(await part.arrayBuffer());
+}
+
+/**
+ * Com `stems` (sdd-016) o worker responde `multipart/form-data`: `result` (o JSON de sempre),
+ * `vocals` e `instrumental`. As trilhas (~3 MB cada) ficam em memória só nesta chamada; quem
+ * grava é o `stems.repository`.
+ */
+async function readExtractionWithStems(response: Response, path: string): Promise<WorkerExtraction> {
+  let form: FormData;
+  try {
+    form = await response.formData();
+  } catch {
+    throw new WorkerClientError("invalid_response", `worker answered ${path} with an unreadable multipart body`);
+  }
+  const result = form.get("result");
+  if (typeof result !== "string") {
+    throw new WorkerClientError("invalid_response", `worker answered ${path} without a "result" part`);
+  }
+  let body: unknown;
+  try {
+    body = JSON.parse(result);
+  } catch {
+    throw new WorkerClientError("invalid_response", `worker answered ${path} with a non-JSON "result" part`);
+  }
+  const vocals = await stemPart(form, "vocals", path);
+  const instrumental = await stemPart(form, "instrumental", path);
+  return parseExtraction(body, path, { vocals, instrumental });
+}
+
 async function readExtraction(response: Response, path: string): Promise<WorkerExtraction> {
-  const { alignment, lyrics, transcript, ...track } = await readJson(response, path, extractResponseSchema, "ExtractResponse");
-  return { track, alignment, lyrics, transcript };
+  const contentType = (response.headers.get("content-type") ?? "").trim();
+  if (MULTIPART_CONTENT_TYPE.test(contentType)) return readExtractionWithStems(response, path);
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new WorkerClientError("invalid_response", `worker answered ${path} with a non-JSON body`);
+  }
+  return parseExtraction(body, path, null);
 }
 
 /** Campos da letra no corpo do worker: `lyrics` ou `lyricsCandidates` + `lyricsPrompt`. */
@@ -263,12 +327,14 @@ export const workerClient = {
   /**
    * `POST /extract` (multipart). O buffer só vive nesta chamada: nada vai para disco. A letra
    * vai junto (campos de texto JSON) para o worker alinhá-la (sdd-010) ou escolhê-la (sdd-011).
+   * Com `stems` (sdd-016), o worker devolve também as duas trilhas.
    */
-  async extract(audio: Buffer, filename: string, lyrics: WorkerLyricsInput): Promise<WorkerExtraction> {
+  async extract(audio: Buffer, filename: string, lyrics: WorkerLyricsInput, { stems = false }: WorkerExtractOptions = {}): Promise<WorkerExtraction> {
     const form = new FormData();
     for (const [name, value] of Object.entries(lyricsFields(lyrics))) {
       form.append(name, typeof value === "string" ? value : JSON.stringify(value));
     }
+    if (stems) form.append("stems", "true");
     // O Buffer do multipart nunca vem de um SharedArrayBuffer; o cast só satisfaz o BlobPart.
     form.append("file", new Blob([audio as Uint8Array<ArrayBuffer>]), filename);
 
@@ -277,8 +343,9 @@ export const workerClient = {
   },
 
   /** `POST /youtube/extract`. Só o `videoId` (e a letra) é enviado, nunca a URL colada. */
-  async extractFromYoutube(videoId: string, lyrics: WorkerLyricsInput): Promise<WorkerExtraction> {
-    const response = await send("/youtube/extract", json({ videoId, ...lyricsFields(lyrics) }), WORKER_TIMEOUTS_MS.youtubeExtract);
+  async extractFromYoutube(videoId: string, lyrics: WorkerLyricsInput, { stems = false }: WorkerExtractOptions = {}): Promise<WorkerExtraction> {
+    const body = { videoId, ...lyricsFields(lyrics), ...(stems ? { stems: true } : {}) };
+    const response = await send("/youtube/extract", json(body), WORKER_TIMEOUTS_MS.youtubeExtract);
     return readExtraction(response, "/youtube/extract");
   },
 

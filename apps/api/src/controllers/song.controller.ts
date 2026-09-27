@@ -9,6 +9,7 @@ import {
   referenceRedoSchema,
   songParamsSchema,
   songSearchQuerySchema,
+  songStemParamsSchema,
   youtubeReferenceBodySchema,
 } from "../utils/validators.js";
 import { parseYoutubeVideoId } from "../utils/youtube.js";
@@ -106,6 +107,19 @@ export async function separateStems(request: FastifyRequest, reply: FastifyReply
   reply.type(contentType);
   if (contentLength !== null) reply.header("content-length", contentLength);
   return reply.send(Readable.fromWeb(stream as NodeReadableStream<Uint8Array>));
+}
+
+/**
+ * Uma trilha guardada da referência (sdd-016): `vocals` ou `instrumental`, como arquivo
+ * `audio/mp4` em streaming do disco, com `Content-Length` (o web mostra o progresso).
+ */
+export async function getSongStem(request: FastifyRequest, reply: FastifyReply) {
+  const { id, stem } = songStemParamsSchema.parse(request.params);
+  const { stream, size, contentType } = await songService.getStem(id, stem);
+
+  reply.type(contentType);
+  reply.header("content-length", size);
+  return reply.send(stream);
 }
 
 export async function getSongAudio(request: FastifyRequest, reply: FastifyReply) {

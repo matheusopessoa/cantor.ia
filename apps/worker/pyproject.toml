@@ -1,6 +1,6 @@
 [project]
 name = "cantor-worker"
-version = "0.6.1"
+version = "0.7.0"
 description = "Extrai a curva de pitch da voz de uma música (arquivo ou YouTube) para o cantor.ia"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

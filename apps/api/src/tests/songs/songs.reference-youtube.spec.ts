@@ -43,7 +43,7 @@ describe("POST /api/songs/:id/reference/youtube", () => {
     expect(stored.referenceStatus).toBe("PROCESSING");
     expect(stored.youtubeVideoId).toBe(VIDEO_ID);
     // Só o videoId vai para o worker, nunca a URL colada (regra 11).
-    expect(workerClient.extractFromYoutube).toHaveBeenCalledWith(VIDEO_ID, KNOWN_LYRICS);
+    expect(workerClient.extractFromYoutube).toHaveBeenCalledWith(VIDEO_ID, KNOWN_LYRICS, { stems: true });
 
     finish();
     await waitForReferenceStatus(song.id, "READY");
@@ -216,7 +216,7 @@ describe("POST /api/songs/:id/reference/youtube — sdd-010", () => {
     expect(claimed.youtubeVideoId).toBe(VIDEO_ID);
     expect(claimed.alignedLyrics).toBeNull();
     expect(claimed.lyricsAlignment).toBeNull();
-    expect(workerClient.extractFromYoutube).toHaveBeenCalledWith(VIDEO_ID, KNOWN_LYRICS);
+    expect(workerClient.extractFromYoutube).toHaveBeenCalledWith(VIDEO_ID, KNOWN_LYRICS, { stems: true });
 
     finish();
     const stored = await waitForReferenceStatus(song.id, "READY");

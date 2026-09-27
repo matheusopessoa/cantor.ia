@@ -100,6 +100,7 @@ describe("POST /api/songs (sdd-011: pelo vídeo)", () => {
       alignedLyrics: null,
       lyricsAlignment: null,
       lyricsSelection: null,
+      stemsKey: null,
     });
     finish();
     await waitForReferenceStatus(response.json().id, "READY");
@@ -125,7 +126,7 @@ describe("POST /api/songs (sdd-011: pelo vídeo)", () => {
           ],
         },
       ],
-    });
+    }, { stems: true });
   });
 
   it("ao terminar grava a letra escolhida, a escolha e a letra alinhada", async () => {
@@ -252,6 +253,7 @@ describe("POST /api/songs { lrclibId } (sdd-015: pela letra)", () => {
       referenceStatus: "NONE",
       youtubeVideoId: null,
       lyricsSelection: null,
+      stemsKey: null,
     });
     expect(response.json()).not.toHaveProperty("referenceTrack");
     expect(lrclibClient.getById).toHaveBeenCalledWith(77);

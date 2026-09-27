@@ -46,7 +46,7 @@ describe("POST /api/songs/:id/reference (upload)", () => {
     const stored = await prisma.song.findUniqueOrThrow({ where: { id: song.id } });
     expect(stored.referenceStatus).toBe("PROCESSING");
     expect(stored.referenceUpdatedAt).toBeInstanceOf(Date);
-    expect(workerClient.extract).toHaveBeenCalledWith(audio, "musica.mp3", KNOWN_LYRICS);
+    expect(workerClient.extract).toHaveBeenCalledWith(audio, "musica.mp3", KNOWN_LYRICS, { stems: true });
 
     finish();
     await waitForReferenceStatus(song.id, "READY");
@@ -259,7 +259,7 @@ describe("POST /api/songs/:id/reference — alinhamento pelo texto (sdd-010)", (
 
     await upload(song.id);
 
-    expect(workerClient.extract).toHaveBeenCalledWith(audio, "musica.mp3", { kind: "known", lines: lyrics });
+    expect(workerClient.extract).toHaveBeenCalledWith(audio, "musica.mp3", { kind: "known", lines: lyrics }, { stems: true });
     await waitForReferenceStatus(song.id, "READY");
   });
 

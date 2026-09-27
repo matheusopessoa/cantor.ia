@@ -5,6 +5,7 @@ import {
   getReference,
   getSong,
   getSongAudio,
+  getSongStem,
   getYoutubeCandidates,
   searchSongs,
   searchSongsByLyrics,
@@ -27,6 +28,7 @@ export async function songRoutes(app: FastifyInstance) {
   app.get("/:id/reference", getReference);
   app.get("/:id/audio", getSongAudio);
   app.post("/:id/stems", separateStems);
+  app.get("/:id/stems/:stem", getSongStem);
   app.get("/:id/youtube-candidates", getYoutubeCandidates);
 
   app.post("/:id/performances", { bodyLimit: PERFORMANCE_BODY_LIMIT }, submitPerformance);

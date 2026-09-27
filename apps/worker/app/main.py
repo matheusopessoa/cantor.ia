@@ -18,6 +18,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -26,7 +27,7 @@ from starlette.concurrency import run_in_threadpool
 
 from pydantic import TypeAdapter, ValidationError
 
-from app import alignment, audio, lyrics_selection, pitch, separation, transcription, youtube, ytmusic
+from app import alignment, audio, device, lyrics_selection, pitch, separation, transcription, youtube, ytmusic
 from app.errors import WorkerError
 from app.schemas import (
     AlignRequest,
@@ -70,6 +71,9 @@ _candidates_adapter = TypeAdapter(list[LyricsCandidate])
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    # Primeiro o device (sdd-016): `WORKER_DEVICE=mps` sem MPS derruba o boot aqui, com a
+    # mensagem clara, antes de qualquer peso ser carregado.
+    device.resolve()
     await run_in_threadpool(separation.load)
     await run_in_threadpool(pitch.load)
     await run_in_threadpool(alignment.load)
@@ -80,7 +84,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="cantor.ia worker", version="0.6.1", lifespan=lifespan)
+app = FastAPI(title="cantor.ia worker", version="0.7.0", lifespan=lifespan)
 
 
 # ── Erros: sempre { error: WorkerErrorCode, message } ─────────────────
@@ -161,10 +165,26 @@ def _select_lyrics(
     return lyrics_selection.choose(candidates, transcript, duration_ms), words
 
 
-def _extract_sync(path: Path, separate: bool, lyrics: LyricsInput | None = None) -> ExtractResponse:
+StemPaths = tuple[Path, Path]
+
+
+def _extract_sync(
+    path: Path, separate: bool, lyrics: LyricsInput | None = None, stems: bool = False
+) -> tuple[ExtractResponse, StemPaths | None]:
+    """A extração. Com `stems` e `separate` (sdd-016), o Demucs roda UMA vez (`separation.stems`):
+    a voz mono do crepe, do Whisper e do MMS_FA é a média do mesmo stem `vocals` que vira a
+    trilha de voz, e o instrumental é `mix − voz`. As duas trilhas são gravadas em AAC no tmp da
+    requisição (`path.parent`) só depois de a curva existir: um `no_voice` não codifica nada."""
     audio.ensure_max_duration(path)
     wav = audio.decode(path)
-    mono = separation.vocals(wav) if separate else wav.mean(axis=0)
+    tracks: tuple[np.ndarray, np.ndarray] | None = None
+    if separate and stems:
+        tracks = separation.stems(wav)
+        mono = tracks[0].mean(axis=0).astype(np.float32)
+    elif separate:
+        mono = separation.vocals(wav)
+    else:
+        mono = wav.mean(axis=0)
     midi = pitch.track(mono)
     if all(value is None for value in midi):
         raise WorkerError("no_voice", "nenhum frame com voz")
@@ -177,12 +197,37 @@ def _extract_sync(path: Path, separate: bool, lyrics: LyricsInput | None = None)
         selected, transcript = _select_lyrics(mono, lyrics.candidates, lyrics.prompt, duration_ms, path.parent)
         lines = selected.lines
     aligned = alignment.align(mono, lines) if lines else None
-    return ExtractResponse(durationMs=duration_ms, midi=midi, alignment=aligned, lyrics=selected, transcript=transcript)
+    result = ExtractResponse(durationMs=duration_ms, midi=midi, alignment=aligned, lyrics=selected, transcript=transcript)
+    if tracks is None:
+        return result, None
+    vocals_path, instrumental_path = path.parent / "vocals.m4a", path.parent / "instrumental.m4a"
+    audio.encode_aac(tracks[0], vocals_path)
+    audio.encode_aac(tracks[1], instrumental_path)
+    return result, (vocals_path, instrumental_path)
 
 
-async def _extract(path: Path, separate: bool, lyrics: LyricsInput | None) -> ExtractResponse:
+async def _extract(
+    path: Path, separate: bool, lyrics: LyricsInput | None, stems: bool = False
+) -> tuple[ExtractResponse, StemPaths | None]:
     async with _extraction_lock:
-        return await run_in_threadpool(_extract_sync, path, separate, lyrics)
+        return await run_in_threadpool(_extract_sync, path, separate, lyrics, stems)
+
+
+def _extract_response(result: ExtractResponse, stems: StemPaths | None, tmp_dir: Path):
+    """JSON como sempre ou, com trilhas (sdd-016), o multipart `result` + `vocals` + `instrumental`
+    em streaming do tmp, que só é limpo depois do último byte. Sem trilhas, o tmp é limpo já."""
+    if stems is None:
+        _cleanup(tmp_dir)
+        return result
+    vocals_path, instrumental_path = stems
+    return _multipart_response(
+        [
+            ("result", result.model_dump_json().encode(), "application/json"),
+            ("vocals", vocals_path, audio.STEMS_MEDIA_TYPE),
+            ("instrumental", instrumental_path, audio.STEMS_MEDIA_TYPE),
+        ],
+        tmp_dir,
+    )
 
 
 def _align_sync(path: Path, separate: bool, current: list[LyricsLine], proposed: list[LyricsLine]) -> AlignResponse:
@@ -220,29 +265,39 @@ async def _stems(path: Path, tmp_dir: Path) -> tuple[Path, Path]:
         return await run_in_threadpool(_stems_sync, path, tmp_dir)
 
 
-def _multipart_part_header(boundary: str, name: str, path: Path, media_type: str) -> bytes:
+MultipartPart = tuple[str, bytes | Path, str]   # (nome, bytes em memória ou arquivo no tmp, media type)
+
+
+def _multipart_part_header(boundary: str, name: str, payload: bytes | Path, media_type: str) -> bytes:
+    filename = f'; filename="{payload.name}"' if isinstance(payload, Path) else ""
     return (
         f"--{boundary}\r\n"
-        f'Content-Disposition: form-data; name="{name}"; filename="{path.name}"\r\n'
+        f'Content-Disposition: form-data; name="{name}"{filename}\r\n'
         f"Content-Type: {media_type}\r\n\r\n"
     ).encode()
 
 
-def _multipart_files_response(parts: list[tuple[str, Path, str]], tmp_dir: Path) -> StreamingResponse:
-    """Resposta `multipart/form-data` com um arquivo por parte, em streaming (nada inteiro em
-    memória), com `Content-Length` calculado dos tamanhos em disco. O tmp é limpo DEPOIS do
-    último byte, como no `/youtube/audio`."""
+def _multipart_response(parts: list[MultipartPart], tmp_dir: Path) -> StreamingResponse:
+    """Resposta `multipart/form-data`: partes em memória (o JSON do `/extract` com trilhas,
+    sdd-016) ou arquivos do tmp em streaming (nada inteiro em memória), com `Content-Length`
+    calculado dos tamanhos. O tmp é limpo DEPOIS do último byte, como no `/youtube/audio`."""
     boundary = f"cantor-stems-{uuid.uuid4().hex}"
     closing = f"--{boundary}--\r\n".encode()
-    headers = [(_multipart_part_header(boundary, name, path, media_type), path) for name, path, media_type in parts]
-    content_length = sum(len(header) + path.stat().st_size + 2 for header, path in headers) + len(closing)
+    headers = [(_multipart_part_header(boundary, name, payload, media_type), payload) for name, payload, media_type in parts]
+    content_length = (
+        sum(len(header) + (payload.stat().st_size if isinstance(payload, Path) else len(payload)) + 2 for header, payload in headers)
+        + len(closing)
+    )
 
     def body() -> Iterator[bytes]:
-        for header, path in headers:
+        for header, payload in headers:
             yield header
-            with path.open("rb") as file:
-                while chunk := file.read(STEMS_CHUNK):
-                    yield chunk
+            if isinstance(payload, Path):
+                with payload.open("rb") as file:
+                    while chunk := file.read(STEMS_CHUNK):
+                        yield chunk
+            else:
+                yield payload
             yield b"\r\n"
         yield closing
 
@@ -329,6 +384,8 @@ async def health() -> dict:
         # Provedor principal da transcrição (sdd-014). `models.whisper` continua dizendo se o
         # Whisper **local** está carregado (com a OpenAI, só depois de a reserva ser usada).
         "transcription": transcription.provider(),
+        # Device do Demucs e do MMS_FA (sdd-016): `cpu` ou `mps`; nulo só antes do boot resolver.
+        "device": device.current(),
         "models": {
             "demucs": separation.is_loaded(),
             "crepe": pitch.is_loaded(),
@@ -338,14 +395,25 @@ async def health() -> dict:
     }
 
 
-@app.post("/extract", response_model=ExtractResponse, responses=ERROR_RESPONSES)
+EXTRACT_RESPONSES = {
+    200: {
+        "content": {"application/json": {}, "multipart/form-data": {}},
+        "description": "JSON `ExtractResponse`; com `stems=true` e `separate=true` (sdd-016), `multipart/form-data` "
+        "com as partes `result` (o mesmo JSON), `vocals` e `instrumental` (AAC `.m4a`).",
+    },
+    **ERROR_RESPONSES,
+}
+
+
+@app.post("/extract", response_model=ExtractResponse, responses=EXTRACT_RESPONSES)
 async def extract(
     file: UploadFile = File(...),
     separate: bool = Form(True),
     lyrics: str | None = Form(None),
     lyricsCandidates: str | None = Form(None),
     lyricsPrompt: str | None = Form(None),
-) -> ExtractResponse:
+    stems: bool = Form(False),
+):
     lines = _parse_json_field(lyrics, _lyrics_adapter, "lyrics precisa ser um JSON de [{ text, startMs? }]")
     candidates = _parse_json_field(
         lyricsCandidates, _candidates_adapter, "lyricsCandidates precisa ser um JSON de [{ source, lines }]"
@@ -354,9 +422,11 @@ async def extract(
     tmp_dir = _new_tmp_dir()
     try:
         path = await _save_upload(file, tmp_dir)
-        return await _extract(path, separate, LyricsInput(lines, candidates, lyricsPrompt))
-    finally:
+        result, stem_paths = await _extract(path, separate, LyricsInput(lines, candidates, lyricsPrompt), stems)
+    except BaseException:
         _cleanup(tmp_dir)
+        raise
+    return _extract_response(result, stem_paths, tmp_dir)
 
 
 @app.post("/stems", responses={200: {"content": {"multipart/form-data": {}}}, **ERROR_RESPONSES})
@@ -372,22 +442,25 @@ async def stems(file: UploadFile = File(...)) -> StreamingResponse:
         _cleanup(tmp_dir)
         raise
     # Os arquivos precisam existir até o último byte ser enviado: a limpeza roda DEPOIS.
-    return _multipart_files_response(
+    return _multipart_response(
         [("vocals", vocals_path, audio.STEMS_MEDIA_TYPE), ("instrumental", instrumental_path, audio.STEMS_MEDIA_TYPE)],
         tmp_dir,
     )
 
 
-@app.post("/youtube/extract", response_model=ExtractResponse, responses=ERROR_RESPONSES)
-async def youtube_extract(body: YoutubeRequest) -> ExtractResponse:
+@app.post("/youtube/extract", response_model=ExtractResponse, responses=EXTRACT_RESPONSES)
+async def youtube_extract(body: YoutubeRequest):
     youtube.validate_video_id(body.videoId)
     _check_lyrics_input(body.lyrics, body.lyricsCandidates)
     tmp_dir = _new_tmp_dir()
     try:
         path = await _download(body.videoId, tmp_dir)   # fora do semáforo
-        return await _extract(path, body.separate, LyricsInput(body.lyrics, body.lyricsCandidates, body.lyricsPrompt))
-    finally:
+        lyrics = LyricsInput(body.lyrics, body.lyricsCandidates, body.lyricsPrompt)
+        result, stem_paths = await _extract(path, body.separate, lyrics, body.stems)
+    except BaseException:
         _cleanup(tmp_dir)
+        raise
+    return _extract_response(result, stem_paths, tmp_dir)
 
 
 @app.post("/youtube/align", response_model=AlignResponse, responses=ERROR_RESPONSES)

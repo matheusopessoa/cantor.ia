@@ -122,6 +122,12 @@ export interface SongDto {
   lyricsAlignment: LyricsAlignment | null;
   /** De onde veio a letra (sdd-011); nulo nas músicas antigas e até a primeira `READY`. */
   lyricsSelection: LyricsSelection | null;
+  /**
+   * Chave das trilhas guardadas no servidor (sdd-016). Com ela, o karaokê toca por
+   * `GET /:id/stems/{vocals,instrumental}` e valida o cache do aparelho por ela. Nulo sem trilhas
+   * (música anterior à sdd-016 ou gravar falhou): fluxo da sdd-013.
+   */
+  stemsKey: string | null;
 }
 
 export interface ReferenceStarted {

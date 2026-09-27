@@ -160,6 +160,11 @@ export const createSongBodySchema = z.union([
 
 export const songParamsSchema = z.object({ id: z.uuid() });
 
+/** As duas trilhas guardadas de uma música (sdd-016). O nome vira nome de arquivo: só pelo enum. */
+export const STEM_NAMES = ["vocals", "instrumental"] as const;
+export type StemName = (typeof STEM_NAMES)[number];
+export const songStemParamsSchema = z.object({ id: z.uuid(), stem: z.enum(STEM_NAMES) });
+
 /** Nome de fliperama: letras, números, espaço, ponto, sublinhado e hífen. Sem HTML. */
 export const playerNameSchema = z
     .string()

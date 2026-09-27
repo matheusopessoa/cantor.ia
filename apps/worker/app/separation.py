@@ -1,8 +1,12 @@
-"""Isolamento da voz com Demucs htdemucs (stem `vocals`) e separação em trilhas (sdd-013)."""
+"""Isolamento da voz com Demucs htdemucs (stem `vocals`) e separação em trilhas (sdd-013).
+
+O modelo roda no device de `app/device.py` (a GPU do Mac quando existe, sdd-016); as saídas
+voltam para a CPU antes de virar `numpy`."""
 
 import numpy as np
 import torch
 
+from app import device
 from app.audio import SAMPLE_RATE
 
 MODEL_NAME = "htdemucs"
@@ -16,7 +20,7 @@ def load() -> None:
     if _separator is None:
         from demucs.api import Separator
 
-        _separator = Separator(model=MODEL_NAME, device="cpu", progress=False)
+        _separator = Separator(model=MODEL_NAME, device=device.resolve(), progress=False)
 
 
 def is_loaded() -> bool:
@@ -29,7 +33,7 @@ def vocals(wav: np.ndarray) -> np.ndarray:
     assert _separator is not None
     with torch.no_grad():
         _, stems = _separator.separate_tensor(torch.from_numpy(wav), SAMPLE_RATE)
-    return stems["vocals"].mean(dim=0).numpy().astype(np.float32)
+    return stems["vocals"].mean(dim=0).cpu().numpy().astype(np.float32)
 
 
 def stems(wav: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -41,7 +45,7 @@ def stems(wav: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     assert _separator is not None
     with torch.no_grad():
         _, separated = _separator.separate_tensor(torch.from_numpy(wav), SAMPLE_RATE)
-    vocals = separated["vocals"].numpy().astype(np.float32)
+    vocals = separated["vocals"].cpu().numpy().astype(np.float32)
     # O Demucs devolve o mesmo comprimento da entrada; o corte é só uma garantia.
     n = min(wav.shape[-1], vocals.shape[-1])
     vocals = np.ascontiguousarray(vocals[:, :n])

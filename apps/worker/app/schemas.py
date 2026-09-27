@@ -119,6 +119,9 @@ class YoutubeRequest(BaseModel):
     lyricsCandidates: list[LyricsCandidate] | None = None
     # "Artista - Título" para o prompt do Whisper (grafia de nomes); só com `lyricsCandidates`.
     lyricsPrompt: str | None = None
+    # sdd-016: com `separate`, devolve também as trilhas (voz e instrumental em AAC) da MESMA
+    # passada do Demucs, num `multipart/form-data` (`result` + `vocals` + `instrumental`).
+    stems: bool = False
 
 
 class YoutubeAudioRequest(BaseModel):

@@ -26,6 +26,7 @@ const songSummarySelect = {
   lyricsSelection: true,
   lyricsRevision: true,
   referenceUpdatedAt: true,
+  stemsKey: true,
   createdAt: true,
 } satisfies Prisma.SongSelect;
 
@@ -109,6 +110,14 @@ export interface MarkReadyData extends AlignmentData {
   lyricsSelection?: Prisma.InputJsonValue;
   /** `LyricsEvidence` (sdd-012): transcrição e candidatas, para a revisão. Só na música nova. */
   lyricsEvidence?: Prisma.InputJsonValue;
+  /** Chave da pasta das trilhas gravadas para esta referência (sdd-016); `null` sem trilhas. */
+  stemsKey?: string | null;
+}
+
+/** Uma música com trilhas guardadas (sdd-016): o que a varredura do boot precisa. */
+export interface SongStemsKey {
+  id: string;
+  stemsKey: string;
 }
 
 /** O que uma revisão aplicada grava (sdd-012): a letra nova, o alinhamento dela e o `reviewedAt`. */
@@ -241,6 +250,8 @@ export const songRepository = {
         lyricsAlignment: Prisma.DbNull,
         lyricsSelection: Prisma.DbNull,
         lyricsEvidence: Prisma.DbNull,
+        // As trilhas são da referência anterior (sdd-016): a pasta é apagada pelo service.
+        stemsKey: null,
       },
     });
 
@@ -255,7 +266,7 @@ export const songRepository = {
    */
   async markReady(
     id: string,
-    { referenceTrack, referenceAudioMs, alignedLyrics, lyricsAlignment, lyrics, lyricsSelection, lyricsEvidence }: MarkReadyData,
+    { referenceTrack, referenceAudioMs, alignedLyrics, lyricsAlignment, lyrics, lyricsSelection, lyricsEvidence, stemsKey }: MarkReadyData,
   ): Promise<void> {
     await prisma.song.update({
       where: { id },
@@ -268,6 +279,8 @@ export const songRepository = {
         ...(lyrics !== undefined ? { lyrics } : {}),
         ...(lyricsSelection !== undefined ? { lyricsSelection } : {}),
         ...(lyricsEvidence !== undefined ? { lyricsEvidence } : {}),
+        // As trilhas desta referência (sdd-016), na mesma escrita da curva: nunca uma sem a outra.
+        ...(stemsKey !== undefined ? { stemsKey } : {}),
         lyricsRevision: { increment: 1 },
         referenceError: null,
         referenceUpdatedAt: new Date(),
@@ -318,6 +331,7 @@ export const songRepository = {
         lyricsAlignment: Prisma.DbNull,
         lyricsSelection: Prisma.DbNull,
         lyricsEvidence: Prisma.DbNull,
+        stemsKey: null,
         referenceUpdatedAt: now,
       },
     });
@@ -336,9 +350,16 @@ export const songRepository = {
         alignedLyrics: Prisma.DbNull,
         lyricsAlignment: Prisma.DbNull,
         lyricsEvidence: Prisma.DbNull,
+        stemsKey: null,
         youtubeVideoId: null,
         referenceUpdatedAt: new Date(),
       },
     });
+  },
+
+  /** Músicas com trilhas guardadas (sdd-016), em 1 query, para a varredura de órfãos no boot. */
+  async findStemsKeys(): Promise<SongStemsKey[]> {
+    const rows = await prisma.song.findMany({ where: { stemsKey: { not: null } }, select: { id: true, stemsKey: true } });
+    return rows.flatMap(({ id, stemsKey }) => (stemsKey === null ? [] : [{ id, stemsKey }]));
   },
 };

@@ -1,5 +1,6 @@
 import { app } from "./app.js";
 import { songRepository } from "./repositories/song.repository.js";
+import { stemsRepository } from "./repositories/stems.repository.js";
 
 const start = async () => {
   const bootedAt = new Date();
@@ -15,6 +16,11 @@ const start = async () => {
     // para os testes que importam o app não dispararem isso.
     const interrupted = await songRepository.failOrphanedProcessing(bootedAt);
     if (interrupted > 0) console.log(`⚠️  ${interrupted} referência(s) interrompida(s) marcada(s) como FAILED`);
+
+    // Pastas de trilhas sem música ou de uma referência que já não é a atual (sdd-016): 1 query.
+    const current = new Map((await songRepository.findStemsKeys()).map(({ id, stemsKey }) => [id, stemsKey]));
+    const swept = await stemsRepository.sweep(current);
+    if (swept > 0) console.log(`🧹 ${swept} pasta(s) de trilhas órfã(s) apagada(s)`);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

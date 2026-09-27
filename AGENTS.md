@@ -53,7 +53,9 @@ Monorepo pnpm (Node.js/TypeScript) com três workspaces e um app Python fora do 
 - **`apps/api`**: arquitetura em camadas simples e unidirecional —
   `routes → controllers → services → repositories → banco de dados`, com `clients/` (HTTP
   externo: LRCLIB e worker, chamados pelos services) e `utils/` como peças compartilhadas
-  sem estado de negócio. **Não há injeção de dependência** via
+  sem estado de negócio. Desde a sdd-016 a API guarda em disco as trilhas (voz e
+  instrumental) de cada referência pronta (`repositories/stems.repository.ts`, pasta
+  `SONG_STEMS_DIR`), e o karaokê toca direto delas (`GET /api/songs/:id/stems/:stem`). **Não há injeção de dependência** via
   construtor/factories/interfaces: os módulos são importados diretamente. Documentado em
   [`apps/api/docs/arquitetura.md`](apps/api/docs/arquitetura.md).
 - **`apps/web`**: Next.js App Router (`app/`), estilizado com Tailwind 4 e os tokens/componentes
@@ -66,7 +68,10 @@ Monorepo pnpm (Node.js/TypeScript) com três workspaces e um app Python fora do 
   (`public/worklets/capture.worklet.js`) e o pitch é detectado com `pitchy` (`lib/recorder.ts`).
   Plano de referência: `specs/sdd-004-web-karaoke/tasks.md`.
 - **`apps/worker`**: FastAPI stateless, sem banco. Pipeline ffmpeg → Demucs (`htdemucs`, voz) →
-  torchcrepe (`tiny`, 10 ms) → `PitchTrack`; com a letra no pedido, a mesma voz isolada passa
+  torchcrepe (`tiny`, 10 ms) → `PitchTrack`; com `stems` no pedido (sdd-016), a mesma passada
+  do Demucs também devolve as trilhas de voz e instrumental em AAC (resposta multipart). O
+  Demucs e o MMS_FA rodam na GPU do Mac (`mps`) quando ela existe (`WORKER_DEVICE`, `app/device.py`);
+  crepe e Whisper local ficam em CPU; com a letra no pedido, a mesma voz isolada passa
   pelo alinhador forçado `torchaudio.pipelines.MMS_FA` (wav2vec2 + CTC, 20 ms) e cada linha
   ganha início, fim e confiança (`alignment`, sdd-010). Com letras candidatas no pedido
   (música nova, sdd-011), a voz passa antes pelo Whisper e o worker escolhe a letra que
@@ -94,13 +99,13 @@ Monorepo pnpm (Node.js/TypeScript) com três workspaces e um app Python fora do 
 | Routes | `apps/api/src/routes/` | Mapear método + URL para um controller. Nenhuma lógica. |
 | Controllers | `apps/api/src/controllers/` | Fronteira HTTP: validar com Zod (`schema.parse`), chamar o service, devolver resposta. Único lugar que conhece `FastifyRequest`/`FastifyReply`. |
 | Services | `apps/api/src/services/` | Regra de negócio. Não conhece HTTP nem SQL. Retorna DTOs simples (ex.: `PublicUser`). |
-| Repositories | `apps/api/src/repositories/` | Acesso a dados via Prisma Client. Retorna models do Prisma. |
+| Repositories | `apps/api/src/repositories/` | Acesso a dados via Prisma Client (retorna models do Prisma) ou, para as trilhas (sdd-016), a pasta local `SONG_STEMS_DIR` (`stems.repository.ts`, o único módulo que toca o sistema de arquivos). |
 | Clients | `apps/api/src/clients/` | Integrações HTTP externas (LRCLIB, worker). Chamados pelos services; validam a resposta com Zod e lançam `AppError`/`WorkerClientError`. |
 | Utils | `apps/api/src/utils/` | Prisma singleton, hash, bindex, schemas Zod (`validators.ts`), erros, error handler global. |
 | Config | `apps/api/src/config/` | Variáveis de ambiente validadas com Zod (`env.ts`) e CORS (`cors.ts`). |
 | App Router | `apps/web/app/` | Páginas e layouts do Next.js. |
 | Design System | `apps/web/DESIGN_SYSTEM/` | Tokens (cores, tipografia, espaçamento) e componentes reutilizáveis da UI. |
-| Worker | `apps/worker/app/` | `main.py` (rotas, erros, semáforo), `audio.py` (ffmpeg), `separation.py` (Demucs), `pitch.py` (crepe), `alignment.py` (MMS_FA), `transcription.py` (Whisper: OpenAI `whisper-1` ou `faster-whisper` local), `config.py` (env com `pydantic-settings`), `lyrics_selection.py` (escolha da letra), `youtube.py` (yt-dlp), `ytmusic.py` (YouTube Music). |
+| Worker | `apps/worker/app/` | `main.py` (rotas, erros, semáforo), `audio.py` (ffmpeg), `separation.py` (Demucs), `pitch.py` (crepe), `alignment.py` (MMS_FA), `transcription.py` (Whisper: OpenAI `whisper-1` ou `faster-whisper` local), `config.py` (env com `pydantic-settings`), `device.py` (`cpu`/`mps` do Demucs e do MMS_FA, sdd-016), `lyrics_selection.py` (escolha da letra), `youtube.py` (yt-dlp), `ytmusic.py` (YouTube Music). |
 | MCP | `apps/mcp/src/` | `server.ts` (as 4 ferramentas, stdio), `api-client.ts` (HTTP para `/api/review/*`, erros legíveis), `env.ts` (`.env` da raiz, Zod), `format.ts` (texto das respostas, puro). |
 
 ---
@@ -131,11 +136,11 @@ cantor.ia/
 │   │   │   ├── clients/         # lrclib.client.ts, worker.client.ts (HTTP externo)
 │   │   │   ├── controllers/     # auth, health, song, performance, review (revisão da letra, sdd-012)
 │   │   │   ├── services/        # auth, health, scoring (nota), alignment (letra ↔ áudio), lyrics-source (letras candidatas), lyrics-review (revisão pelo MCP), song, youtube-suggestion, performance
-│   │   │   ├── repositories/    # user, song, performance
+│   │   │   ├── repositories/    # user, song, performance, stems (pasta local das trilhas, sdd-016)
 │   │   │   ├── routes/          # auth.routes.ts, health.routes.ts, song.routes.ts, review.routes.ts (token de serviço)
 │   │   │   ├── utils/           # prisma, hash, bindex, validators, errors, error-handler, pitch, lrc, youtube, review-auth
 │   │   │   ├── generated/       # Prisma Client gerado (ignorado pelo Git)
-│   │   │   ├── tests/           # alignment/, auth/, clients/, config/, errors/, healthcheck/, lrc/, lyrics/, performances/, review/, scoring/, songs/, youtube/, helpers/
+│   │   │   ├── tests/           # alignment/, auth/, clients/, config/, errors/, healthcheck/, lrc/, lyrics/, performances/, review/, scoring/, songs/, stems/, youtube/, helpers/
 │   │   │   ├── app.ts
 │   │   │   └── server.ts
 │   │   ├── prisma/
@@ -164,13 +169,14 @@ cantor.ia/
 │   │   ├── tsconfig.json / vitest.config.ts
 │   │   └── package.json
 │   └── worker/                  # Python 3.12 + uv (fora do pnpm)
-│       ├── app/                 # main, audio, separation, pitch, alignment, transcription, lyrics_selection, youtube, ytmusic, schemas, errors
+│       ├── app/                 # main, audio, separation, pitch, alignment, transcription, config, device, lyrics_selection, youtube, ytmusic, schemas, errors
 │       ├── tests/               # pytest (conftest com sinais sintéticos e yt-dlp falso)
-│       ├── scripts/plot_track.py
+│       ├── scripts/             # plot_track.py, compare_devices.py (cpu vs mps numa música real, sdd-016)
 │       ├── pyproject.toml / uv.lock
 │       └── Dockerfile
 ├── .env.example                 # catálogo versionado de todas as variáveis (sem segredos)
 ├── .env                         # valores locais, ignorado pelo Git (pnpm env:init)
+├── .data/stems/                 # trilhas guardadas pela API (SONG_STEMS_DIR), ignorada pelo Git (sdd-016)
 ├── .mcp.json                    # registra o servidor MCP `cantor` (apps/mcp) no Claude Code
 ├── scripts/
 │   ├── dev.mjs                  # `pnpm dev`: db + api + web + worker de uma vez
@@ -399,9 +405,11 @@ de teste. Plano de referência: `specs/sdd-006-env-config/tasks.md`.
 | `WORKER_URL` | api | não (padrão: `http://localhost:8000`; compose: `http://worker:8000`) | não | `config/env.ts` |
 | `LRCLIB_BASE_URL` | api | não (padrão: `https://lrclib.net`) | não | `config/env.ts` |
 | `LYRICS_REVIEW_SECRET` | api, mcp | não (sem ela `/api/review/*` responde 503 e o MCP não sobe; vazia conta como ausente) | sim (≥ 32; token de serviço da revisão da letra, sdd-012) | `config/env.ts`, `apps/mcp/src/env.ts` |
+| `SONG_STEMS_DIR` | api | não (padrão: `.data/stems` na raiz do repo; relativa é resolvida contra a raiz; compose: volume `/data/stems`) | não | `config/env.ts` |
 | `NEXT_PUBLIC_API_URL` | web (browser, build-time), mcp | sim | **nunca** | `lib/env.public.ts`, `apps/mcp/src/env.ts` |
 | `API_INTERNAL_URL` | web (servidor) | não (padrão: `NEXT_PUBLIC_API_URL`) | não | `lib/env.server.ts` |
 | `OPENAI_API_KEY` | worker | não (sem ela, ou vazia: Whisper local na CPU) | **sim** (nunca na API nem no web; `SecretStr`, nunca logada) | `apps/worker/app/config.py` |
+| `WORKER_DEVICE` | worker | não (padrão `auto`: `mps` na GPU do Mac se houver, senão `cpu`; `cpu`/`mps` forçam, `mps` sem MPS derruba o boot; vazia conta como `auto`) | não | `apps/worker/app/config.py`, `app/device.py` |
 
 `NODE_ENV` não fica no `.env`: é definido por processo (API: `dev` por padrão, `test` pelo
 `.env.test`, `prod` pelo compose; o Next define o dele).
@@ -412,7 +420,7 @@ de teste. Plano de referência: `specs/sdd-006-env-config/tasks.md`.
 
 - **Repositório**: cantor.ia — `github.com/matheusopessoa/cantor.ia`.
 - **Gerenciador de pacotes**: pnpm 10.24.0, workspaces em `apps/*`.
-- **Apps**: `api` (v2.3.0), `web` (v0.7.0), `worker` (v0.6.1), `mcp` (v0.1.0) — ainda sem releases/tags publicadas.
+- **Apps**: `api` (v2.4.0), `web` (v0.8.0), `worker` (v0.7.0), `mcp` (v0.1.0) — ainda sem releases/tags publicadas.
 - **Squad/owners/maintainers**: _(preencher — não há esse dado no repositório hoje)_.
 - **Infra**: Docker Compose para dev (`docker-compose.dev.yml`), testes
   (`docker-compose.test.yml`) e produção (`docker-compose.prod.yml`); `nginx.conf` presente na

@@ -1,6 +1,6 @@
 {
   "name": "web",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "scripts": {
     "dev": "lsof -ti:5173 2>/dev/null | xargs kill -9 2>/dev/null; next dev -p 5173",

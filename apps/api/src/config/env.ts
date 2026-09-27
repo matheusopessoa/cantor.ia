@@ -1,14 +1,17 @@
 import { config } from "dotenv";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { InvalidEnvironmentError } from "../utils/errors.js";
+
+// src/config → raiz do repo (a mesma profundidade vale para dist/config).
+const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 
 // Na suíte, o ambiente vem só do apps/api/.env.test (vitest.config.ts): nenhum valor de dev
 // pode vazar para os testes.
 if (process.env["NODE_ENV"] !== "test") {
   config({
-    // src/config → raiz do repo (a mesma profundidade vale para dist/config).
-    path: fileURLToPath(new URL("../../../../.env", import.meta.url)),
+    path: resolve(REPO_ROOT, ".env"),
     quiet: true,
   });
 }
@@ -39,6 +42,13 @@ export const envSchema = z
     // Token de serviço das rotas /api/review/* (revisão da letra pelo MCP, sdd-012). Opcional:
     // sem ela (ou vazia, como o compose passa quando não está no .env), a revisão fica desligada.
     LYRICS_REVIEW_SECRET: z.preprocess((value) => (value === "" ? undefined : value), secretSchema.optional()),
+    // Pasta local das trilhas (voz e instrumental) das referências prontas (sdd-016). Relativa
+    // à raiz do repo; no compose é um volume. Sempre absoluta depois de validada.
+    SONG_STEMS_DIR: z
+      .string()
+      .min(1)
+      .default(".data/stems")
+      .transform((value) => resolve(REPO_ROOT, value)),
   })
   .refine((env) => env.NODE_ENV !== "prod" || env.CORS_ALLOWED_ORIGINS.length > 0, {
     path: ["CORS_ALLOWED_ORIGINS"],

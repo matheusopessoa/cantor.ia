@@ -1,5 +1,5 @@
 import { expect, vi } from "vitest";
-import type { WorkerExtraction } from "../../clients/worker.client.js";
+import type { WorkerExtraction, WorkerStemFiles } from "../../clients/worker.client.js";
 import type { Prisma, ReferenceStatus, Song } from "../../generated/prisma/client.js";
 import { prisma } from "../../utils/prisma.js";
 import type { ForcedAlignment, PitchTrack, SelectedLyrics, TranscriptWord } from "../../utils/validators.js";
@@ -39,9 +39,13 @@ export function extraction(
   alignment: ForcedAlignment | null = null,
   lyrics: SelectedLyrics | null = null,
   transcript: TranscriptWord[] | null = null,
+  stems: WorkerStemFiles | null = null,
 ): WorkerExtraction {
-  return { track, alignment, lyrics, transcript };
+  return { track, alignment, lyrics, transcript, stems };
 }
+
+/** As duas trilhas como vêm do worker (sdd-016): bytes quaisquer, a API não decodifica. */
+export const STEM_FILES: WorkerStemFiles = { vocals: Buffer.from("VOZ-AAC"), instrumental: Buffer.from("INSTRUMENTAL-AAC") };
 
 /** A letra de uma música antiga, como vai ao worker (sdd-010: só alinhar). */
 export const KNOWN_LYRICS = { kind: "known", lines: melody.lines } as const;
@@ -99,6 +103,7 @@ const statusSelect = {
   lyricsSelection: true,
   lyricsEvidence: true,
   lyricsRevision: true,
+  stemsKey: true,
 } as const;
 
 /** Espera o processamento em background chegar ao `status` e devolve o estado gravado. */

@@ -40,7 +40,9 @@ diretamente, o que mantém o código curto e fácil de navegar.
   `Readable.fromWeb`, sem carregar o arquivo inteiro em memória. `POST /:id/stems` (sdd-013)
   junta os dois: lê o áudio do multipart para um `Buffer` e repassa em streaming o
   `multipart/form-data` do worker (voz e instrumental), com o `content-type` e o `boundary`
-  dele.
+  dele. `GET /:id/stems/:stem` (sdd-016) serve uma trilha guardada como arquivo `audio/mp4`
+  em streaming do disco, com `Content-Length`; `stem` passa pelo enum `STEM_NAMES` do
+  `validators.ts` antes de virar nome de arquivo.
 
 ## `src/services/`
 
@@ -105,7 +107,15 @@ diretamente, o que mantém o código curto e fácil de navegar.
   primeira leitura, uma vez por música (sempre pelo método por pausas: o áudio não é
   guardado). `startReference*` aceitam `{ redo }` (sdd-010): com a flag, uma referência
   `READY` volta a `PROCESSING` e melodia e letra são refeitas; sem ela, `READY` → 409. Também serve o áudio para tocar (`getAudio`),
-  repassando o stream do worker.
+  repassando o stream do worker. Desde a sdd-016 as extrações pedem `{ stems: true }`: o
+  worker devolve, da mesma passada do Demucs, as trilhas de voz e instrumental, e
+  `runReference` as grava na pasta local (`stemsRepository.save`, chave nova por referência)
+  **antes** do `markReady`, que grava a `stemsKey` na mesma escrita da curva; gravar que
+  falha (disco) deixa a referência `READY` sem `stemsKey` e nunca a derruba. O `claim` apaga a
+  pasta da referência anterior (a chave foi zerada no mesmo `updateMany`). `getStem(id, stem)`
+  abre uma trilha guardada em streaming: só `READY` com `stemsKey`; ausente ou arquivo sumido →
+  `StemsNotStoredError` (404 `STEMS_NOT_STORED`), e o web cai no fluxo da sdd-013
+  (`separateStems`, que continua igual).
 - [`lyrics-source.service.ts`](../src/services/lyrics-source.service.ts) — coleta as letras
   candidatas de uma música nova (sdd-011): `collect(song)` consulta YouTube Music
   (`workerClient.getYtmusicSong`) e LRCLIB (`lrclibClient.find`) em paralelo
@@ -161,9 +171,18 @@ diretamente, o que mantém o código curto e fácil de navegar.
 
 ## `src/repositories/`
 
-- **Função**: Acesso a dados. Fala diretamente com o Prisma Client.
-- **Regra**: Só consultas ao banco. Retorna os models do Prisma; qualquer transformação para
-  DTO acontece no service.
+- **Função**: Acesso a dados: o Prisma Client ou, para as trilhas (sdd-016), a pasta local.
+- **Regra**: Só consultas ao banco ou ao disco. Retorna os models do Prisma; qualquer
+  transformação para DTO acontece no service. Nenhum outro módulo da API toca o sistema de
+  arquivos.
+- [`stems.repository.ts`](../src/repositories/stems.repository.ts) — a pasta local de trilhas
+  (sdd-016): `<SONG_STEMS_DIR>/<songId>/<stemsKey>/{vocals,instrumental}.m4a`. `save` grava as
+  duas com `.part` + `rename` (nenhum leitor vê arquivo pela metade) e lança se o disco
+  recusar; `open(songId, key, stem)` devolve `{ stream, size, contentType }` ou `null`;
+  `prune(songId, keep)` apaga as outras chaves da música (`null` = a pasta inteira) e
+  `sweep(current)` apaga, no boot (`server.ts`, depois do `failOrphanedProcessing`), pastas de
+  músicas sem chave e chaves que não são a atual. Apagar é sempre melhor esforço. Caminhos só
+  com `songId` (uuid validado), `stemsKey` (uuid gerado pela API) e o enum `STEM_NAMES`.
 - [`song.repository.ts`](../src/repositories/song.repository.ts) — consultas de `Song` com
   `select` explícito **sem** `referenceTrack` (pode passar de 400 KB); só
   `findWithReference` carrega o campo. O `select` inclui `alignedLyrics` e
@@ -191,7 +210,10 @@ diretamente, o que mantém o código curto e fácil de navegar.
   letra nova); claim, `markFailed` e `failOrphanedProcessing` zeram a evidência;
   `findForReview()` lista as `READY` sem curva nem evidência; `applyLyricsReview(id, revision,
   data)` é um `updateMany` condicionado a `lyricsRevision = revision` e `READY`, no modelo do
-  `claimForProcessing`, e incrementa a versão.
+  `claimForProcessing`, e incrementa a versão. Para as trilhas guardadas (sdd-016):
+  `Song.stemsKey` entra no `select` e no `SongDto`; `markReady` a grava junto com a curva;
+  claim, `markFailed` e `failOrphanedProcessing` a zeram; `findStemsKeys()` lista, em 1 query,
+  as músicas com chave para a varredura do boot.
 - [`performance.repository.ts`](../src/repositories/performance.repository.ts) — cria a
   performance, conta as melhores do mesmo nível (`countBetter(songId, difficulty, score)`) e
   lista o ranking de um nível (`findTopBySong(songId, difficulty, limit)`: nota desc, empate
@@ -227,8 +249,13 @@ diretamente, o que mantém o código curto e fácil de navegar.
   `specs/sdd-011-lyrics-from-video/tasks.md` §4; conferência em
   `specs/sdd-012-lyrics-review-mcp/tasks.md` §4). As extrações recebem `WorkerLyricsInput`:
   `{ kind: "known", lines }` manda `lyrics`; `{ kind: "candidates", candidates, prompt }` manda
-  `lyricsCandidates` + `lyricsPrompt` (JSON; no multipart, antes do arquivo). Devolvem
-  `WorkerExtraction = { track, alignment, lyrics, transcript }`, com o `alignment` validado por
+  `lyricsCandidates` + `lyricsPrompt` (JSON; no multipart, antes do arquivo). Com
+  `{ stems: true }` (sdd-016) pedem também as trilhas: o worker responde `multipart/form-data`
+  com `result` (o JSON de sempre), `vocals` e `instrumental`, lido com `response.formData()`
+  (as duas trilhas, ~3 MB cada, ficam em memória só nesta chamada) e devolvido em
+  `WorkerExtraction.stems: WorkerStemFiles | null` (`null` na resposta JSON; parte ausente ou
+  vazia → `invalid_response`). Devolvem
+  `WorkerExtraction = { track, alignment, lyrics, transcript, stems }`, com o `alignment` validado por
   `forcedAlignmentSchema`, a letra escolhida por `selectedLyricsSchema` e as palavras do
   Whisper por `transcriptWordSchema` (inválidos → `invalid_response`; ausentes → `null`).
   `alignFromYoutube` devolve `WorkerAlignment = { durationMs, current, proposed }` (os dois
@@ -306,7 +333,9 @@ Peças compartilhadas, sem estado de negócio:
   banco e segredos: `WORKER_URL` (padrão `http://localhost:8000`), `LRCLIB_BASE_URL`
   (padrão `https://lrclib.net`) e `LYRICS_REVIEW_SECRET` (opcional, ≥ 32 caracteres; vazia
   conta como ausente, que é o que o compose passa quando não está no `.env`; sem ela a
-  revisão da letra fica desligada, sdd-012). Catálogo em `AGENTS.md` §11.
+  revisão da letra fica desligada, sdd-012) e `SONG_STEMS_DIR` (pasta das trilhas guardadas,
+  sdd-016; padrão `.data/stems` na raiz do repo, relativa é resolvida contra a raiz e sai
+  sempre absoluta; no compose é o volume `/data/stems`). Catálogo em `AGENTS.md` §11.
 - [`cors.ts`](../src/config/cors.ts) — opções do CORS por ambiente.
 
 ## Recursos
@@ -315,7 +344,7 @@ Peças compartilhadas, sem estado de negócio:
 |---|---|---|
 | Health | `GET /api/health` | `health.*` |
 | Auth | `POST /api/auth/register`, `POST /api/auth/login` | `auth.*`, `user.repository` |
-| Songs | `GET /api/songs/search/lyrics` (LRCLIB, só letra sincronizada, sdd-015), `GET /api/songs/search` (YouTube Music), `POST /api/songs` (`{ lrclibId }`: fica em `NONE`, sdd-015; ou `{ videoId }`: já começa a referência), `GET /api/songs/:id`, `POST /api/songs/:id/reference/youtube`, `POST\|GET /api/songs/:id/reference`, `GET /api/songs/:id/audio`, `POST /api/songs/:id/stems` (voz e instrumental do áudio enviado, sdd-013), `GET /api/songs/:id/youtube-candidates` | `song.*`, `lyrics-source.service`, `youtube-suggestion.service`, `lrclib.client`, `worker.client` |
+| Songs | `GET /api/songs/search/lyrics` (LRCLIB, só letra sincronizada, sdd-015), `GET /api/songs/search` (YouTube Music), `POST /api/songs` (`{ lrclibId }`: fica em `NONE`, sdd-015; ou `{ videoId }`: já começa a referência), `GET /api/songs/:id`, `POST /api/songs/:id/reference/youtube`, `POST\|GET /api/songs/:id/reference`, `GET /api/songs/:id/audio`, `POST /api/songs/:id/stems` (voz e instrumental do áudio enviado, sdd-013), `GET /api/songs/:id/stems/:stem` (`vocals` \| `instrumental` guardados na preparação, sdd-016), `GET /api/songs/:id/youtube-candidates` | `song.*`, `stems.repository`, `lyrics-source.service`, `youtube-suggestion.service`, `lrclib.client`, `worker.client` |
 | Performances | `POST /api/songs/:id/performances` (body `+ difficulty?`), `GET /api/songs/:id/performances?limit=&difficulty=` | `performance.*`, `song.repository`, `scoring.service` |
 | Review (token de serviço, sdd-012) | `GET /api/review/songs?limit=`, `GET /api/review/songs/:id`, `POST /api/review/songs/:id/check` (`{ lines }`), `POST /api/review/songs/:id/apply` (`{ checkId }`) | `review.*`, `lyrics-review.service`, `alignment.service`, `song.repository`, `worker.client`, `utils/review-auth` |
 
@@ -328,7 +357,9 @@ a busca, o cadastro pelo vídeo e a escolha da letra (`SongSearchItem`, `lyricsS
 a revisão da letra (`ReviewSongSummary`, `ReviewSongDetail`, `ReviewCheck`) em
 [`specs/sdd-012-lyrics-review-mcp/tasks.md`](../../../specs/sdd-012-lyrics-review-mcp/tasks.md) §4;
 as trilhas separadas (`POST /:id/stems`) em
-[`specs/sdd-013-singer-volume/tasks.md`](../../../specs/sdd-013-singer-volume/tasks.md) §4.
+[`specs/sdd-013-singer-volume/tasks.md`](../../../specs/sdd-013-singer-volume/tasks.md) §4;
+as trilhas guardadas (`stemsKey`, `GET /:id/stems/:stem`) em
+[`specs/sdd-016-stems-once/tasks.md`](../../../specs/sdd-016-stems-once/tasks.md) §4.
 
 ## Como adicionar um recurso novo
 

@@ -97,6 +97,10 @@ model Song {
   /// Versão da letra (sdd-012): incrementa a cada READY e a cada revisão aplicada. A revisão só
   /// grava se a versão não mudou desde a conferência (sem sobrescrever um redo no meio).
   lyricsRevision     Int                 @default(0)
+  /// Trilhas (voz e instrumental) da referência atual, guardadas na pasta local
+  /// `SONG_STEMS_DIR/<id>/<stemsKey>/` (sdd-016). Nulo sem trilhas: músicas antigas, em
+  /// PROCESSING/FAILED, ou se gravar falhou. Muda a cada referência nova (claim zera).
+  stemsKey           String?
   createdAt          DateTime            @default(now())
   performances       Performance[]
 }

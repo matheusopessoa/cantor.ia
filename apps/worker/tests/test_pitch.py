@@ -42,7 +42,8 @@ def test_ruido_branco_quase_todo_none():
 
 def test_tamanho_do_array_bate_com_a_duracao(tmp_path):
     path = write_wav(tmp_path / "a.wav", sine(330, 2.5))
-    track = main._extract_sync(path, separate=False)
+    track, stems = main._extract_sync(path, separate=False)
+    assert stems is None
     assert track.hopMs == 10
     assert abs(len(track.midi) - round(track.durationMs / 10)) <= 1
     assert track.durationMs == pytest.approx(2500, abs=5)
@@ -60,5 +61,5 @@ def test_pipeline_completo_com_demucs(tmp_path):
     rng = np.random.default_rng(1)
     mix = sine(440, 10, amp=0.4) + (0.05 * rng.standard_normal(10 * 44_100)).astype(np.float32)
     path = write_wav(tmp_path / "mix.wav", mix)
-    track = main._extract_sync(path, separate=True)
+    track, _ = main._extract_sync(path, separate=True)
     assert abs(len(track.midi) - round(track.durationMs / 10)) <= 1

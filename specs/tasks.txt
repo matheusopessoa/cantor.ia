@@ -163,7 +163,16 @@ Fora do MVP: acerto de letra via Whisper, tempo por palavra, instrumental, login
     vídeo escolhido depois na sugestão da sdd-008) por padrão; quando o LRCLIB não tiver a
     música, "procurar pelo vídeo" (YouTube Music + Whisper, sdd-011).
 
-Pendente (ainda não planejado — virará sdd-016):
+16. sdd-016-stems-once — rodar o Demucs uma vez só por música. Pedido do usuário (2026-09-26):
+    "e não daria pra o Demucs rodar só uma vez?" → "pode salvar os áudios numa pasta local,
+    esse negócio só vai rodar no meu PC mesmo". Hoje cada música passa duas vezes por download e
+    Demucs (preparação e karaokê, sdd-013). A preparação passa a devolver as trilhas (voz e
+    instrumental) e a API guarda numa pasta local; o karaokê toca direto delas. Derruba a regra
+    13 da sdd-003 (o servidor não guarda áudio). No mesmo plano (o usuário quis um só para toda
+    a otimização): o worker roda Demucs e MMS_FA na GPU do Mac (`WORKER_DEVICE`, MPS) — medido
+    3,7× e 2,2× mais rápido; o crepe fica em CPU (sem ganho).
+
+Pendente (ainda não planejado — virará sdd-017):
 
 Adicionar endpoint de refresh token no fluxo de autenticação da API.
 

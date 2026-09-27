@@ -1,7 +1,8 @@
 # cantor.ia — web
 
 Frontend do karaokê (Next.js 16, App Router, React 19, Tailwind 4 + cantor.ia Design System).
-Consome a API em `apps/api` e não guarda áudio no servidor.
+Consome a API em `apps/api`; o áudio original nunca fica no servidor (as trilhas separadas
+ficam, desde a sdd-016).
 
 ## Telas
 
@@ -16,17 +17,26 @@ interação fica em Client Components (`components/`). Plano: `specs/sdd-004-web
 
 ## Áudio e microfone
 
-- **Áudio da música**: cache no IndexedDB por música (`lib/audio-store.ts`). Sem cache, baixa
-  via `GET /api/songs/:id/audio` (com progresso) se a referência veio do YouTube; senão pede o
-  arquivo, que fica só no dispositivo. Áudio com duração diferente da letra em mais de 10 s é
-  recusado.
-- **Voz do cantor** (sdd-013): com o áudio pronto, a tela de cantar pede em segundo plano a
-  `POST /api/songs/:id/stems` (manda o próprio áudio) as trilhas de voz e instrumental, que
-  ficam no IndexedDB (`lib/stems-store.ts`; o banco compartilhado é aberto em
-  `lib/indexed-db.ts`). Com elas, a música toca em duas fontes sincronizadas e o slider "Voz do
-  cantor" (`lib/singer-volume.ts`, 0–100 %, padrão 50 %, memorizado) controla um `GainNode` só
-  na voz, antes e durante a cantoria; a segunda saída recebe a mesma mistura. Sem trilhas
-  (gerando, falhou, sem IndexedDB, duração fora de ±100 ms do original), toca o original.
+- **Trilhas guardadas** (sdd-016, o caminho principal): música com `stemsKey` no `SongDto`
+  toca só pelas trilhas de voz e instrumental que a API guardou na preparação. A tela de
+  cantar usa o cache do IndexedDB (`lib/stems-store.ts`, registro com a mesma `stemsKey`) ou
+  baixa as duas em paralelo de `GET /api/songs/:id/stems/{vocals,instrumental}`
+  (`api.downloadStems`, progresso somado por `lib/download-progress.ts`). Nada do YouTube é
+  baixado e o worker não é chamado; o slider "Voz do cantor" já nasce habilitado. Duração
+  conferida pelo instrumental (±10 s da letra). Se a API não tiver as trilhas (404
+  `STEMS_NOT_STORED`) ou algo não bater, cai no fluxo abaixo.
+- **Áudio da música** (músicas sem `stemsKey`): cache no IndexedDB por música
+  (`lib/audio-store.ts`). Sem cache, baixa via `GET /api/songs/:id/audio` (com progresso) se a
+  referência veio do YouTube; senão pede o arquivo, que fica só no dispositivo. Áudio com
+  duração diferente da letra em mais de 10 s é recusado.
+- **Voz do cantor** (sdd-013, o fallback): com o áudio pronto, a tela de cantar pede em
+  segundo plano a `POST /api/songs/:id/stems` (manda o próprio áudio) as trilhas de voz e
+  instrumental, que ficam no IndexedDB (`lib/stems-store.ts`, registro com `sourceSize`; o
+  banco compartilhado é aberto em `lib/indexed-db.ts`). Com elas, a música toca em duas
+  fontes sincronizadas e o slider "Voz do cantor" (`lib/singer-volume.ts`, 0–100 %, padrão
+  50 %, memorizado) controla um `GainNode` só na voz, antes e durante a cantoria; a segunda
+  saída recebe a mesma mistura. Sem trilhas (gerando, falhou, sem IndexedDB, duração fora de
+  ±100 ms do original), toca o original.
 - **Microfone**: `AudioWorklet` em `public/worklets/capture.worklet.js` manda blocos de 10 ms
   para `lib/recorder.ts`, que detecta o pitch com `pitchy` e monta o `PitchTrack` (hop de
   10 ms) enviado à API. A latência (`outputLatency + baseLatency`) é descontada automaticamente;

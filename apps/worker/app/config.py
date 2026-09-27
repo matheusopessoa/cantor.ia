@@ -7,6 +7,7 @@ serviço. Catálogo e convenção de nomes em `AGENTS.md` §11.
 
 from functools import cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -26,6 +27,10 @@ class Settings(BaseSettings):
     # `SecretStr` não aparece em `repr`, log nem erro de validação.
     OPENAI_API_KEY: SecretStr | None = None
 
+    # Device do Demucs e do MMS_FA (sdd-016): `auto` usa a GPU do Mac (`mps`) quando existe,
+    # senão a CPU; `cpu`/`mps` forçam (`mps` sem MPS falha no boot). Resolvido em `app/device.py`.
+    WORKER_DEVICE: Literal["auto", "cpu", "mps"] = "auto"
+
     @field_validator("OPENAI_API_KEY", mode="before")
     @classmethod
     def _empty_is_missing(cls, value: object) -> object:
@@ -33,6 +38,14 @@ class Settings(BaseSettings):
         if value is None or (isinstance(value, str) and value.strip() == ""):
             return None
         return value
+
+    @field_validator("WORKER_DEVICE", mode="before")
+    @classmethod
+    def _empty_is_auto(cls, value: object) -> object:
+        # O compose passa `${WORKER_DEVICE:-auto}`, mas um `.env` com `WORKER_DEVICE=` também conta como auto.
+        if value is None or (isinstance(value, str) and value.strip() == ""):
+            return "auto"
+        return value.strip().lower() if isinstance(value, str) else value
 
 
 @cache

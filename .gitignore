@@ -149,6 +149,10 @@ docker-compose.override.yaml
 CLAUDE.local.md
 graphify-out/
 
+# ─── Dados locais da API (sdd-016) ───────────────────────────────────
+# Trilhas (voz e instrumental) das referências, guardadas pela API (SONG_STEMS_DIR).
+.data/
+
 # ─── Temporários ─────────────────────────────────────────────────────
 tmp/
 temp/

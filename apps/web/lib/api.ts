@@ -1,3 +1,4 @@
+import { combinedProgress, type DownloadProgress } from "./download-progress";
 import { publicEnv } from "./env.public";
 import type {
   Difficulty,
@@ -28,7 +29,7 @@ export class ApiError extends Error {
   }
 }
 
-export type DownloadProgress = (loaded: number, total: number | null) => void;
+export type { DownloadProgress } from "./download-progress";
 
 export interface ReferenceOptions {
   /** Refaz melodia e letra de uma referência já pronta (sdd-010). Sem isso, `READY` responde 409. */
@@ -56,6 +57,41 @@ async function toApiError(response: Response): Promise<ApiError> {
 async function parseJson<T>(response: Response): Promise<T> {
   if (!response.ok) throw await toApiError(response);
   return (await response.json()) as T;
+}
+
+/**
+ * Baixa um arquivo em streaming, avisando o progresso. `onProgress` recebe o total só quando
+ * a API mandou `Content-Length`; sem ele, a tela mostra espera indeterminada. `signal` cancela
+ * o download (sair da página no meio).
+ */
+async function downloadBlob(fileUrl: string, onProgress?: DownloadProgress, signal?: AbortSignal): Promise<Blob> {
+  const response = await fetch(fileUrl, { cache: "no-store", signal });
+  if (!response.ok) throw await toApiError(response);
+
+  const contentType = response.headers.get("content-type") ?? "application/octet-stream";
+  const lengthHeader = response.headers.get("content-length");
+  const total = lengthHeader && /^\d+$/.test(lengthHeader) ? Number(lengthHeader) : null;
+
+  if (!response.body) {
+    const blob = await response.blob();
+    onProgress?.(blob.size, total ?? blob.size);
+    return blob;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  onProgress?.(0, total);
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    loaded += value.byteLength;
+    onProgress?.(loaded, total);
+  }
+
+  return new Blob(chunks as BlobPart[], { type: contentType });
 }
 
 /**
@@ -122,39 +158,23 @@ export function createApi(baseUrl: string) {
       return parseJson(response);
     },
 
+    /** Baixa o áudio para tocar (streaming, com progresso; ver `downloadBlob`). */
+    downloadSongAudio(id: string, onProgress?: DownloadProgress, signal?: AbortSignal): Promise<Blob> {
+      return downloadBlob(url(`/${encodeURIComponent(id)}/audio`), onProgress, signal);
+    },
+
     /**
-     * Baixa o áudio para tocar (streaming). `onProgress` recebe o total só quando a API
-     * mandou `Content-Length`; sem ele, a tela mostra espera indeterminada. `signal` cancela
-     * o download (sair da página no meio).
+     * As trilhas guardadas no servidor (sdd-016): voz e instrumental, dois GETs em paralelo com
+     * o progresso somado. Só para música com `stemsKey`; 404 `STEMS_NOT_STORED` quando o
+     * servidor não as tem (a tela cai no fluxo da sdd-013).
      */
-    async downloadSongAudio(id: string, onProgress?: DownloadProgress, signal?: AbortSignal): Promise<Blob> {
-      const response = await fetch(url(`/${encodeURIComponent(id)}/audio`), { cache: "no-store", signal });
-      if (!response.ok) throw await toApiError(response);
-
-      const contentType = response.headers.get("content-type") ?? "application/octet-stream";
-      const lengthHeader = response.headers.get("content-length");
-      const total = lengthHeader && /^\d+$/.test(lengthHeader) ? Number(lengthHeader) : null;
-
-      if (!response.body) {
-        const blob = await response.blob();
-        onProgress?.(blob.size, total ?? blob.size);
-        return blob;
-      }
-
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let loaded = 0;
-      onProgress?.(0, total);
-
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        loaded += value.byteLength;
-        onProgress?.(loaded, total);
-      }
-
-      return new Blob(chunks as BlobPart[], { type: contentType });
+    async downloadStems(id: string, onProgress?: DownloadProgress, signal?: AbortSignal): Promise<{ vocals: Blob; instrumental: Blob }> {
+      const [vocalsProgress, instrumentalProgress] = combinedProgress(2, onProgress);
+      const [vocals, instrumental] = await Promise.all([
+        downloadBlob(url(`/${encodeURIComponent(id)}/stems/vocals`), vocalsProgress, signal),
+        downloadBlob(url(`/${encodeURIComponent(id)}/stems/instrumental`), instrumentalProgress, signal),
+      ]);
+      return { vocals, instrumental };
     },
 
     /**

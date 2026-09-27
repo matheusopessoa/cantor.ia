@@ -150,6 +150,16 @@ export class StemsAudioRejectedError extends AppError {
   }
 }
 
+/**
+ * A música não tem trilhas guardadas (sdd-016): anterior à sdd-016, não `READY`, gravar falhou
+ * ou o arquivo sumiu da pasta. O web cai no fluxo da sdd-013 (`POST /:id/stems`).
+ */
+export class StemsNotStoredError extends AppError {
+  constructor() {
+    super("Song has no stored stems", 404, "STEMS_NOT_STORED");
+  }
+}
+
 // ─── Revisão da letra pelo MCP (sdd-012) ─────────────────────────────────────
 
 /** `/api/review/*` sem o `Authorization: Bearer <LYRICS_REVIEW_SECRET>` certo. */

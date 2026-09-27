@@ -27,7 +27,7 @@ describe("workerClient.extractFromYoutube (sdd-010)", () => {
 
     const result = await workerClient.extractFromYoutube("dQw4w9WgXcQ", KNOWN_LYRICS);
 
-    expect(result).toEqual({ track: melody.track, alignment: forced, lyrics: null, transcript: null });
+    expect(result).toEqual({ track: melody.track, alignment: forced, lyrics: null, transcript: null, stems: null });
     expect(calls[0]?.url).toMatch(/\/youtube\/extract$/);
     expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ videoId: "dQw4w9WgXcQ", lyrics: melody.lines });
   });
@@ -70,7 +70,7 @@ describe("workerClient.extract (sdd-010)", () => {
 
     const result = await workerClient.extract(Buffer.from("audio"), "musica.mp3", KNOWN_LYRICS);
 
-    expect(result).toEqual({ track: melody.track, alignment: null, lyrics: null, transcript: null });
+    expect(result).toEqual({ track: melody.track, alignment: null, lyrics: null, transcript: null, stems: null });
     const form = calls[0]?.init.body as FormData;
     expect(form).toBeInstanceOf(FormData);
     expect([...form.keys()]).toEqual(["lyrics", "file"]);
@@ -253,5 +253,90 @@ describe("workerClient.separateStems (sdd-013)", () => {
     await expect(workerClient.separateStems(Buffer.from("audio"), "musica.m4a")).rejects.toEqual(
       new WorkerClientError("too_long", "áudio com 700s"),
     );
+  });
+});
+
+describe("sdd-016: trilhas junto com a extração (`stems`)", () => {
+  const boundary = "cantor-stems-016";
+  const result = JSON.stringify({ ...melody.track, alignment: null });
+
+  function multipartBody(parts: { result?: string; vocals?: string; instrumental?: string }) {
+    let body = "";
+    if (parts.result !== undefined) {
+      body += `--${boundary}\r\nContent-Disposition: form-data; name="result"\r\nContent-Type: application/json\r\n\r\n${parts.result}\r\n`;
+    }
+    for (const name of ["vocals", "instrumental"] as const) {
+      const content = parts[name];
+      if (content === undefined) continue;
+      body += `--${boundary}\r\nContent-Disposition: form-data; name="${name}"; filename="${name}.m4a"\r\nContent-Type: audio/mp4\r\n\r\n${content}\r\n`;
+    }
+    return `${body}--${boundary}--\r\n`;
+  }
+
+  function stubMultipart(body: string) {
+    const calls: { url: string; init: RequestInit }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string | URL, init: RequestInit = {}) => {
+        calls.push({ url: String(url), init });
+        return new Response(body, { status: 200, headers: { "content-type": `multipart/form-data; boundary=${boundary}` } });
+      }),
+    );
+    return calls;
+  }
+
+  it("extractFromYoutube com stems manda `stems: true` e lê result + vocals + instrumental do multipart", async () => {
+    const calls = stubMultipart(multipartBody({ result, vocals: "VOZ", instrumental: "INST" }));
+
+    const extraction = await workerClient.extractFromYoutube("dQw4w9WgXcQ", KNOWN_LYRICS, { stems: true });
+
+    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ videoId: "dQw4w9WgXcQ", lyrics: melody.lines, stems: true });
+    expect(extraction.track).toEqual(melody.track);
+    expect(extraction.alignment).toBeNull();
+    expect(extraction.stems).toEqual({ vocals: Buffer.from("VOZ"), instrumental: Buffer.from("INST") });
+  });
+
+  it("extract com stems manda o campo `stems` antes do arquivo", async () => {
+    const calls = stubMultipart(multipartBody({ result, vocals: "VOZ", instrumental: "INST" }));
+
+    const extraction = await workerClient.extract(Buffer.from("audio"), "musica.mp3", KNOWN_LYRICS, { stems: true });
+
+    const form = calls[0]?.init.body as FormData;
+    expect([...form.keys()]).toEqual(["lyrics", "stems", "file"]);
+    expect(form.get("stems")).toBe("true");
+    expect(extraction.stems?.vocals.toString()).toBe("VOZ");
+  });
+
+  it("sem a opção, o corpo não tem `stems` e a resposta JSON dá stems: null", async () => {
+    const calls = stubFetch({ ...melody.track, alignment: null });
+
+    const extraction = await workerClient.extractFromYoutube("dQw4w9WgXcQ", KNOWN_LYRICS);
+
+    expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ videoId: "dQw4w9WgXcQ", lyrics: melody.lines });
+    expect(extraction.stems).toBeNull();
+  });
+
+  it("worker responde JSON mesmo com stems pedido (separate=false) → stems: null", async () => {
+    stubFetch({ ...melody.track, alignment: null });
+
+    const extraction = await workerClient.extractFromYoutube("dQw4w9WgXcQ", KNOWN_LYRICS, { stems: true });
+
+    expect(extraction.stems).toBeNull();
+  });
+
+  it.each([
+    ["sem a parte result", multipartBody({ vocals: "VOZ", instrumental: "INST" })],
+    ["result que não é JSON", multipartBody({ result: "{oops", vocals: "VOZ", instrumental: "INST" })],
+    ["result inválido", multipartBody({ result: JSON.stringify({ version: 2 }), vocals: "VOZ", instrumental: "INST" })],
+    ["sem a parte vocals", multipartBody({ result, instrumental: "INST" })],
+    ["instrumental vazio", multipartBody({ result, vocals: "VOZ", instrumental: "" })],
+    ["corpo que não é multipart", "isso não é multipart"],
+  ])("multipart malformado (%s) → invalid_response", async (_label, body) => {
+    stubMultipart(body);
+
+    await expect(workerClient.extractFromYoutube("dQw4w9WgXcQ", KNOWN_LYRICS, { stems: true })).rejects.toMatchObject({
+      name: "WorkerClientError",
+      code: "invalid_response",
+    });
   });
 });

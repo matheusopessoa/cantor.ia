@@ -49,6 +49,7 @@ raiz (o ambiente do processo vence o arquivo):
 | Variável | Efeito |
 |---|---|
 | `OPENAI_API_KEY` | Transcreve a voz com o `whisper-1` da OpenAI (sdd-014). Sem ela (ou vazia), o Whisper local na CPU. **Segredo**: nunca vai para a API nem para o web, nem aparece em log. Ponha um limite mensal de gasto no projeto da OpenAI. |
+| `WORKER_DEVICE` | Device do Demucs e do MMS_FA (sdd-016): `auto` (padrão) usa a GPU do Mac (`mps`) quando `torch.backends.mps.is_available()`, senão `cpu`; `cpu`/`mps` forçam (`mps` sem MPS derruba o boot com a mensagem). O crepe (`tiny`, sem ganho medido) e o Whisper local (ctranslate2) ficam em CPU. No Docker (Linux) `auto` vira `cpu`. O `/health` diz qual foi escolhido. |
 
 Com a chave, o boot **não** carrega o Whisper local (`/health`: `transcription: "openai"`,
 `models.whisper: false`); ele só carrega se a reserva for usada.
@@ -77,9 +78,9 @@ uv run python scripts/transcribe_spike.py <id> ... --provider openai|local      
 
 | Rota | Entrada | Saída |
 |---|---|---|
-| `GET /health` | — | `{ status, transcription: "openai" \| "local", models: { demucs, crepe, mms_fa, whisper } }` — `transcription` é o provedor principal (sdd-014); `models.whisper` diz se o Whisper **local** está carregado |
-| `POST /extract` | multipart `file` (+ `separate`, padrão `true`; + `lyrics`, string JSON de `LyricsLine[]`; ou + `lyricsCandidates`, string JSON de `LyricsCandidate[]`, e `lyricsPrompt`) | `ExtractResponse` |
-| `POST /youtube/extract` | `{ videoId, separate?, lyrics?: LyricsLine[], lyricsCandidates?: LyricsCandidate[], lyricsPrompt? }` | `ExtractResponse` |
+| `GET /health` | — | `{ status, transcription: "openai" \| "local", device: "cpu" \| "mps" \| null, models: { demucs, crepe, mms_fa, whisper } }` — `transcription` é o provedor principal (sdd-014); `device` é o do Demucs/MMS_FA (sdd-016; nulo só antes do boot resolver); `models.whisper` diz se o Whisper **local** está carregado |
+| `POST /extract` | multipart `file` (+ `separate`, padrão `true`; + `lyrics`, string JSON de `LyricsLine[]`; ou + `lyricsCandidates`, string JSON de `LyricsCandidate[]`, e `lyricsPrompt`; + `stems`, padrão `false`) | `ExtractResponse` em JSON; com `stems=true` e `separate=true` (sdd-016), `multipart/form-data` com as partes `result` (o mesmo JSON), `vocals` e `instrumental` (AAC `.m4a`, o formato do `/stems`), da **mesma** passada do Demucs; erros sempre em JSON |
+| `POST /youtube/extract` | `{ videoId, separate?, lyrics?: LyricsLine[], lyricsCandidates?: LyricsCandidate[], lyricsPrompt?, stems? }` | como o `/extract` |
 | `POST /stems` | multipart `file` (mesmos limites do `/extract`) | `multipart/form-data` com os arquivos `vocals` e `instrumental` (AAC `.m4a` estéreo a 44,1 kHz, 112 kbps, mesmo número de amostras; `instrumental = mix − voz`), com `Content-Length` (sdd-013) |
 | `POST /youtube/align` | `{ videoId, separate?, current: LyricsLine[], proposed: LyricsLine[] }` | `AlignResponse = { durationMs, current: Alignment \| null, proposed: Alignment \| null }` — a letra atual e a proposta de uma revisão alinhadas sobre a mesma voz, com **uma** passada do wav2vec2; sem crepe nem Whisper; nada é gravado (sdd-012) |
 | `POST /youtube/audio` | `{ videoId }` | bytes `audio/mp4` (ou `audio/mpeg`, se precisou converter) |
@@ -320,10 +321,40 @@ mais que o instrumental e a 128 kbps as duas deram 2,02× o original, por isso a
 taxa do `AudioContext` do mesmo jeito. Custo por música de 3–4 min: o Demucs (50–95 s em CPU)
 mais ~2 s de codificação.
 
-## Desempenho (Mac ARM, CPU, medido em 2026-09-25)
+## Desempenho (Mac M5, 16 GB, medido em 2026-09-26)
 
-Música de 3:33 pelo `/youtube/extract`: **72 s** de ponta a ponta (download ~2 s, Demucs ~51 s,
-crepe ~20–33 s); com a letra, mais ~10 s do alinhador (medido em 2026-09-26). `/health` responde em ~1 ms durante a extração.
+Música de 3:33 ("Tempo Perdido", Tiago Iorc) com a letra e `stems=true` (sdd-016), em
+processo (`scripts/compare_devices.py`), download à parte (~3 s):
+
+| etapa | `WORKER_DEVICE=cpu` | `WORKER_DEVICE=mps` (padrão neste Mac) |
+|---|---|---|
+| Demucs (`separation.stems`) | 45,8 s | **14,8 s** |
+| crepe `tiny` (sempre em CPU) | 23,8 s | 25,2 s |
+| MMS_FA (`alignment.align`) | 9,6 s | **5,3 s** |
+| AAC das duas trilhas | 2,9 s | 2,8 s |
+| **total** | **82,3 s** | **48,4 s** |
+
+Antes da sdd-016 (2026-09-25, CPU): 72 s sem a letra, ~82 s com ela. O que mudou: o Demucs e
+o MMS_FA na GPU do Mac (Etapa B) e mais ~3 s de AAC para devolver as trilhas (Etapa A), que
+poupam o segundo Demucs de 50–95 s e o segundo download no karaokê. O crepe `tiny` não ganha
+nada em `mps` (medido: 5,9 s vs 5,5 s em 60 s de áudio) e fica em CPU, sem mudar a curva.
+`/health` responde em ~1 ms durante a extração.
+
+Qualidade na mesma música (`scripts/compare_devices.py`, 20 866 frames, 30 linhas). O Demucs
+usa um deslocamento aleatório por rodada (`shifts=1` no `Separator`), então **duas rodadas em
+CPU também diferem**; a linha de base é `cpu` vs `cpu`:
+
+| | `cpu` vs `mps` | `cpu` vs `cpu` (ruído entre rodadas) |
+|---|---|---|
+| frames iguais em voz/sem voz | 96,9 % | 97,0 % |
+| frames com voz dentro de 50 cents | 99,96 % | 99,98 % |
+| linhas com início dentro de ±40 ms | 28/30 | 28/30 |
+| maior diferença no início de uma linha | 140 ms | 140 ms |
+| diferença média do `score` por linha | 0,014 | 0,015 |
+
+O MPS fica dentro do ruído entre rodadas: `auto` escolhe `mps`. Para reproduzir:
+`uv run python scripts/compare_devices.py tyE1PFSSdg8 --lrclib "Tiago Iorc" "Tempo Perdido"`
+(e `--devices cpu,cpu` para a linha de base).
 
 O crepe roda com o modelo **`tiny`**. No benchmark contra o `full`, os dois tiveram a mesma
 precisão (erro mediano de 6 cents em voz sintética, 0,1% dos frames divergindo > 50 cents em
