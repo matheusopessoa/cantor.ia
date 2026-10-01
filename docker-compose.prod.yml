@@ -1,3 +1,5 @@
+# Variáveis vêm do .env do servidor, com os mesmos nomes do .env.example. Cada serviço recebe
+# só o que é dele em `environment:` — não usar `env_file:`.
 services:
   nginx:
     image: nginx:alpine
@@ -11,8 +13,24 @@ services:
   api:
     environment:
       NODE_ENV: prod
-      DATABASE_URL: "postgresql://${PROD_DB_USER}:${PROD_DB_PASS}@meu-rds-producao.aws.com:5432/feedback_prod_db"
-      EMAIL_BINDEX_SECRET: "${EMAIL_BINDEX_SECRET}"
-      JWT_SIGN_SECRET: "${JWT_SIGN_SECRET}"
-      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS}"
+      DATABASE_URL: ${DATABASE_URL:?defina DATABASE_URL no .env do servidor}
+      JWT_SIGN_SECRET: ${JWT_SIGN_SECRET:?defina JWT_SIGN_SECRET no .env do servidor}
+      EMAIL_BINDEX_SECRET: ${EMAIL_BINDEX_SECRET:?defina EMAIL_BINDEX_SECRET no .env do servidor}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?defina CORS_ALLOWED_ORIGINS no .env do servidor}
+      # Opcional (sdd-012): vazia desliga a revisão da letra (503 em /api/review/*).
+      LYRICS_REVIEW_SECRET: ${LYRICS_REVIEW_SECRET:-}
+      WORKER_URL: http://worker:8000
+    restart: always
+
+  web:
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?defina NEXT_PUBLIC_API_URL (URL pública da API) no .env do servidor}
+    environment:
+      API_INTERNAL_URL: http://api:3333
+    restart: always
+
+  worker:
+    # Só na rede interna: nada de porta pública em produção.
+    ports: !reset []
     restart: always

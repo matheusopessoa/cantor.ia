@@ -37,6 +37,11 @@ COPY apps/web ./apps/web
 # Desativa a telemetria do Next.js (boa prática para CI/CD)
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# O Next embute NEXT_PUBLIC_* no bundle durante o build: o valor precisa existir aqui,
+# e mudá-lo exige rebuild da imagem.
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 WORKDIR /repo/apps/web
 RUN pnpm build
 

@@ -1,0 +1,21 @@
+/* ════════════════════════════════════════════════════════════════
+   CANTOR.IA DESIGN SYSTEM
+   Ponto de entrada único. Só importa; nunca escreva regras aqui.
+   ════════════════════════════════════════════════════════════════ */
+
+/* As webfonts (tokens/fonts.css) NÃO entram aqui: é um @import remoto (Google Fonts), e o
+   Tailwind 4 inclui este arquivo depois das próprias regras, onde um @import remoto é
+   inválido. O app carrega as fontes com <link> em apps/web/app/layout.tsx; a vitrine, com
+   <link href="tokens/fonts.css">. As duas usam a mesma URL de tokens/fonts.css. */
+@import './tokens/colors.css';
+@import './tokens/typography.css';
+@import './tokens/spacing.css';
+@import './tokens/effects.css';
+@import './tokens/motion.css';
+@import './tokens/base.css';
+
+@import './components/button.css';
+@import './components/form.css';
+@import './components/surface.css';
+@import './components/game.css';
+@import './components/brand.css';

@@ -1,0 +1,171 @@
+/* Formulários: campo padrão, busca, "INSIRA SEU NOME" de fliperama, slider de offset, upload. */
+
+.ct-field { display: grid; gap: var(--space-2); }
+
+.ct-field__label {
+  font-family: var(--font-arcade);
+  font-size: var(--fs-arcade-sm);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.ct-field__hint  { font-size: var(--fs-sm); color: var(--text-tertiary); }
+.ct-field__error { font-size: var(--fs-sm); color: var(--status-danger); display: flex; gap: var(--space-2); align-items: center; }
+
+.ct-input {
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-4);
+  font-family: var(--font-body);
+  font-size: var(--fs-body-lg);
+  color: var(--text-primary);
+  background: var(--bg-sunken);
+  border: var(--border-base) solid var(--border-default);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.ct-input::placeholder { color: var(--text-tertiary); }
+.ct-input:hover { border-color: var(--border-strong); }
+.ct-input:focus-visible { outline: none; border-color: var(--border-focus); box-shadow: var(--glow-cyan); }
+.ct-input[aria-invalid="true"] { border-color: var(--status-danger); }
+.ct-input[aria-invalid="true"]:focus-visible { box-shadow: var(--glow-red); }
+
+/* Busca: ícone de lupa à esquerda */
+.ct-search { position: relative; }
+.ct-search .ct-input { padding-left: calc(var(--space-4) + 28px); min-height: 56px; }
+.ct-search__icon {
+  position: absolute; left: var(--space-4); top: 50%; translate: 0 -50%;
+  width: 22px; height: 22px; color: var(--text-tertiary); pointer-events: none;
+}
+
+/* Nome do jogador: tela de recorde de fliperama */
+.ct-name-entry {
+  font-family: var(--font-arcade);
+  font-weight: var(--fw-bold);
+  font-size: var(--fs-h3);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--neon-yellow);
+  text-shadow: var(--text-glow-yellow);
+  caret-color: var(--neon-yellow);
+  min-height: 64px;
+  background: var(--bg-sunken);
+  border-color: var(--neon-yellow);
+}
+.ct-name-entry:focus-visible { border-color: var(--neon-yellow); box-shadow: var(--glow-yellow); }
+.ct-name-entry::placeholder { color: var(--lilac-500); text-shadow: none; }
+
+/* Slider (offset da letra) */
+.ct-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: var(--tap-min);
+  background: transparent;
+  cursor: pointer;
+}
+.ct-range::-webkit-slider-runnable-track {
+  height: 6px;
+  background: linear-gradient(90deg, var(--neon-pink), var(--neon-purple), var(--neon-cyan));
+  border-radius: var(--radius-pill);
+}
+.ct-range::-moz-range-track {
+  height: 6px;
+  background: linear-gradient(90deg, var(--neon-pink), var(--neon-purple), var(--neon-cyan));
+  border-radius: var(--radius-pill);
+}
+.ct-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 24px; height: 24px; margin-top: -9px;
+  background: var(--lilac-050);
+  border: var(--border-base) solid var(--night-900);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--glow-cyan);
+}
+.ct-range::-moz-range-thumb {
+  width: 20px; height: 20px;
+  background: var(--lilac-050);
+  border: var(--border-base) solid var(--night-900);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--glow-cyan);
+}
+
+/* Área de upload do MP3 */
+.ct-dropzone {
+  display: grid;
+  place-items: center;
+  gap: var(--space-3);
+  padding: var(--space-7) var(--space-5);
+  text-align: center;
+  color: var(--text-secondary);
+  background: var(--bg-sunken);
+  border: var(--border-base) dashed var(--border-default);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.ct-dropzone svg { width: 40px; height: 40px; color: var(--neon-purple); }
+.ct-dropzone:hover,
+.ct-dropzone.is-dragover { border-color: var(--neon-cyan); border-style: solid; color: var(--text-primary); box-shadow: var(--glow-cyan); }
+
+/* Campo com botão acoplado: colar link do YouTube + "Usar vídeo"
+   <div class="ct-input-group"><input class="ct-input" …><button class="ct-btn ct-btn--primary">…</button></div> */
+.ct-input-group {
+  display: flex;
+  align-items: stretch;
+}
+.ct-input-group .ct-input {
+  flex: 1;
+  min-width: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.ct-input-group .ct-btn {
+  flex: none;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  box-shadow: none;
+}
+.ct-input-group .ct-btn:active { transform: none; }
+@media (max-width: 520px) {
+  .ct-input-group { flex-direction: column; gap: var(--space-2); }
+  .ct-input-group .ct-input,
+  .ct-input-group .ct-btn { border-radius: var(--radius-sm); }
+}
+
+/* Abas / controle segmentado: "Link do YouTube | Enviar arquivo".
+   Use role="tablist" + role="tab" + aria-selected; o painel com role="tabpanel". */
+.ct-tabs {
+  display: inline-flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--bg-sunken);
+  border: var(--border-base) solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.ct-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 0 var(--space-4);
+  font-family: var(--font-arcade);
+  font-size: var(--fs-arcade-sm);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.ct-tab svg { width: 18px; height: 18px; }
+.ct-tab:hover { color: var(--text-primary); background: var(--bg-raised); }
+.ct-tab[aria-selected="true"] {
+  color: var(--text-on-neon);
+  background: var(--neon-cyan);
+  box-shadow: var(--glow-cyan);
+}

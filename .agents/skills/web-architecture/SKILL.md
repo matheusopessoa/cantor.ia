@@ -1,6 +1,6 @@
 ---
 name: web-architecture
-description: Especialista na arquitetura frontend do cantor.ia (apps/web — Next.js 16 App Router + React 19 + Tailwind 4 + design system Atrito). Use para dúvidas sobre páginas, layouts, componentes, tokens e padrões visuais.
+description: Especialista na arquitetura frontend do cantor.ia (apps/web — Next.js 16 App Router + React 19 + Tailwind 4 + cantor.ia Design System). Use para dúvidas sobre páginas, layouts, componentes, tokens e padrões visuais.
 ---
 
 # Web Architecture — `apps/web`
@@ -16,7 +16,7 @@ Você é o(a) especialista de arquitetura frontend (Next.js App Router) do canto
 3. [`apps/web/AGENTS.md`](../../../apps/web/AGENTS.md) — regras específicas da versão do Next.js
    usada no projeto. **Esta versão tem breaking changes**: consulte o guia relevante em
    `apps/web/node_modules/next/dist/docs/` antes de afirmar como uma API do Next.js funciona.
-4. Design system: `apps/web/DESIGN_SYSTEM/_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/readme.md`
+4. Design system: `apps/web/DESIGN_SYSTEM/readme.md`
    e `tokens/*.css` (`colors.css`, `typography.css`, `spacing.css`, `fonts.css`, `base.css`).
 
 ## Mapa atual
@@ -28,8 +28,12 @@ apps/web/
 │   ├── page.tsx       # rota "/"
 │   └── globals.css    # @import "tailwindcss" + variáveis --background/--foreground + @theme
 ├── DESIGN_SYSTEM/
-│   ├── DESIGN_SYSTEM.html          # catálogo visual
-│   └── _ds/atrito-design-system-*/ # readme.md, styles.css, tokens/*.css
+│   ├── DESIGN_SYSTEM.html  # vitrine visual (servir a pasta via http)
+│   ├── readme.md           # regras do DS
+│   ├── styles.css          # entrada única (tokens + componentes ct-*)
+│   ├── tailwind-theme.css  # ponte @theme inline para utilitários Tailwind
+│   ├── tokens/             # fonts, colors, typography, spacing, effects, motion, base
+│   └── components/         # button, form, surface, game, brand
 ├── public/
 ├── eslint.config.mjs  # ESLint flat config (eslint-config-next)
 ├── postcss.config.mjs # @tailwindcss/postcss
@@ -46,9 +50,11 @@ apps/web/
   eventos do navegador.
 - **Estilos**: Tailwind 4 (configuração CSS-first via `@theme` em `globals.css`). Valores de
   cor, tipografia e espaçamento devem vir dos tokens do design system, não de literais soltos.
-- **Design system Atrito** (ver readme): estritamente preto e branco — hierarquia por valor,
-  tamanho e peso, nunca por matiz; microinterações lentas (400–700ms); sem emoji, sem pontos de
-  exclamação, sentence case; tom sério e acolhedor, sem julgamento.
+- **cantor.ia Design System** (ver readme): visual inspirado em anos 80 synthwave, fliperama e
+  Guitar Hero (a inspiração nunca aparece em texto da interface), dark-only. Brilho neon é a hierarquia; um único `ct-btn--primary` (rosa) por tela; classes com
+  prefixo `ct-`; Press Start 2P só para números (sem acentos maiúsculos); letra da música em
+  Rubik 900 com preenchimento de karaokê; movimento rápido (≤ 240ms), com overshoot só na
+  recompensa; tudo respeita `prefers-reduced-motion`; pt-BR com energia de fliperama, sem emoji.
 - **Componentes novos** reutilizáveis devem ser documentados no readme do design system
   (`AGENTS.md` §3).
 - **Consumo da API**: a API expõe rotas sob `/api` (porta 3333 em dev). Contratos vêm dos schemas

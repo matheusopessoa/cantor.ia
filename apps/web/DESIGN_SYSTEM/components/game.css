@@ -1,0 +1,257 @@
+/* Componentes de jogo: letra de karaokê, highway de afinação, HUD, contagem,
+   placar final, conceito (S/A/B/C/D), medidor de LED e ranking de fliperama. */
+
+/* ── Letra de karaokê ──────────────────────────────────────────────
+   Preenchimento clássico de karaokê: a linha atual "enche" conforme
+   --progress (0 a 1, setado via JS). Funciona com quebra de linha: o
+   gradiente atravessa as linhas em sequência (box-decoration-break: slice).
+   <p class="ct-lyric is-current" style="--progress:.4"><span class="ct-lyric__text">texto</span></p> */
+
+.ct-lyrics {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: center;
+  text-align: center;
+  padding: var(--space-5) var(--space-4);
+}
+
+.ct-lyric {
+  --progress: 0;
+  margin: 0;
+  max-width: 22ch;
+  font-family: var(--font-body);
+  font-weight: var(--fw-heavy);
+  font-size: var(--fs-lyric-next);
+  line-height: var(--lh-snug);
+  text-wrap: balance;
+  color: var(--text-tertiary);
+  transition: font-size var(--dur-base) var(--ease-out), color var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+}
+.ct-lyric.is-past { opacity: 0.45; }
+.ct-lyric.is-next { color: var(--text-secondary); }
+
+.ct-lyric.is-current {
+  font-size: var(--fs-lyric-current);
+  font-weight: var(--fw-black);
+  filter: drop-shadow(0 0 10px rgba(31, 240, 255, 0.35));
+}
+.ct-lyric.is-current .ct-lyric__text {
+  background: linear-gradient(
+    90deg,
+    var(--lyric-sung) 0 calc(var(--progress) * 100%),
+    var(--lyric-unsung) calc(var(--progress) * 100%) 100%
+  );
+  -webkit-background-clip: text;
+          background-clip: text;
+  color: transparent;
+  -webkit-text-stroke: 1px var(--lyric-stroke);
+  -webkit-box-decoration-break: slice;
+          box-decoration-break: slice;
+}
+
+/* ── Highway de afinação ───────────────────────────────────────────
+   Moldura em perspectiva estilo Guitar Hero. O conteúdo (canvas com a
+   curva de referência e a voz) vai dentro de .ct-highway__lane. */
+
+.ct-highway {
+  position: relative;
+  height: 280px;
+  perspective: 600px;
+  overflow: hidden;
+  background: var(--bg-sunken);
+}
+.ct-highway__lane {
+  position: absolute;
+  inset: -40% 12% 0;
+  transform: rotateX(52deg);
+  transform-origin: 50% 100%;
+  background:
+    linear-gradient(90deg, transparent calc(20% - 1px), var(--night-600) 20%, transparent calc(20% + 1px)) 0 0 / 100% 100%,
+    repeating-linear-gradient(90deg, transparent 0 calc(20% - 1px), rgba(178, 107, 255, 0.35) calc(20% - 1px) 20%),
+    repeating-linear-gradient(180deg, transparent 0 58px, rgba(178, 107, 255, 0.18) 58px 60px),
+    linear-gradient(180deg, var(--night-950), var(--night-800));
+  border-inline: var(--border-base) solid var(--neon-purple);
+  box-shadow: var(--glow-purple);
+}
+.ct-highway__lane canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* Linha de acerto: pulsa no beat */
+.ct-highway__hitline {
+  position: absolute;
+  left: 8%; right: 8%; bottom: 18%;
+  height: 4px;
+  background: var(--lilac-050);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--glow-cyan);
+  animation: ct-beat var(--dur-beat) var(--ease-out) infinite;
+}
+
+/* Gema (nota) — cor do traste via modificador */
+.ct-gem {
+  --gem: var(--fret-green);
+  width: 28px; height: 14px;
+  background: radial-gradient(circle at 50% 35%, var(--gem-highlight) 0 18%, var(--gem) 40%);
+  border: var(--border-base) solid var(--night-950);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 0 10px var(--gem);
+}
+.ct-gem--green  { --gem: var(--fret-green); }
+.ct-gem--red    { --gem: var(--fret-red); }
+.ct-gem--yellow { --gem: var(--fret-yellow); }
+.ct-gem--blue   { --gem: var(--fret-blue); }
+.ct-gem--orange { --gem: var(--fret-orange); }
+
+/* Feedback de acerto que aparece sobre a linha */
+.ct-hit {
+  font-family: var(--font-score);
+  font-size: var(--fs-sm);
+  letter-spacing: var(--ls-arcade);
+  text-transform: uppercase;
+  animation: ct-pop var(--dur-base) var(--ease-snap) both;
+}
+.ct-hit--perfect { color: var(--hit-perfect); text-shadow: 0 0 10px var(--hit-perfect); }
+.ct-hit--good    { color: var(--hit-good);    text-shadow: 0 0 10px var(--hit-good); }
+.ct-hit--miss    { color: var(--hit-miss);    text-shadow: 0 0 10px var(--hit-miss); }
+/* Fácil (sem afinação): cantou no lugar certo → "On time", na cor do Perfect */
+.ct-hit--ontime  { color: var(--hit-perfect); text-shadow: 0 0 10px var(--hit-perfect); }
+
+/* ── HUD (barra superior durante a música) ─────────────────────── */
+.ct-hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: linear-gradient(180deg, rgba(7, 3, 26, 0.95), rgba(7, 3, 26, 0.6));
+  border-bottom: var(--border-base) solid var(--night-600);
+}
+.ct-hud__item { display: grid; gap: var(--space-1); }
+.ct-hud__value {
+  font-family: var(--font-arcade);
+  font-size: var(--fs-arcade-lg);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+/* Barra de progresso da música */
+.ct-progress {
+  height: 6px;
+  background: var(--night-600);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+}
+.ct-progress__fill {
+  --value: 0;
+  width: calc(var(--value) * 100%);
+  height: 100%;
+  background: var(--grad-neon);
+  box-shadow: var(--glow-pink);
+}
+
+/* ── Contagem 3-2-1 ────────────────────────────────────────────── */
+.ct-countdown {
+  display: grid;
+  place-items: center;
+  font-family: var(--font-score);
+  font-size: var(--fs-mega);
+  color: var(--neon-yellow);
+  text-shadow: var(--text-glow-yellow);
+  animation: ct-countdown 1s var(--ease-out) both;
+}
+
+/* ── Placar final ──────────────────────────────────────────────── */
+.ct-score {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+.ct-score__value {
+  font-family: var(--font-score);
+  font-size: var(--fs-score);
+  white-space: nowrap;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--lilac-050);
+  text-shadow: var(--text-glow-pink);
+  animation: ct-pop var(--dur-slow) var(--ease-snap) both;
+}
+.ct-score__max { font-size: 0.35em; color: var(--text-tertiary); text-shadow: none; }
+
+/* Conceito arcade: <span class="ct-grade" data-grade="S">S</span> */
+.ct-grade {
+  --grade: var(--grade-d);
+  display: inline-grid;
+  place-items: center;
+  width: 1.6em; height: 1.6em;
+  font-family: var(--font-display);
+  font-size: var(--fs-display);
+  line-height: 1;
+  color: var(--grade);
+  border: var(--border-thick) solid var(--grade);
+  border-radius: var(--radius-md);
+  text-shadow: 0 0 12px var(--grade), 0 0 32px var(--grade);
+  box-shadow: 0 0 12px var(--grade), inset 0 0 18px color-mix(in srgb, var(--grade) 35%, transparent);
+  transform: rotate(-6deg);
+  animation: ct-pop var(--dur-slow) var(--ease-snap) 200ms both;
+}
+.ct-grade[data-grade="S"] { --grade: var(--grade-s); }
+.ct-grade[data-grade="A"] { --grade: var(--grade-a); }
+.ct-grade[data-grade="B"] { --grade: var(--grade-b); }
+.ct-grade[data-grade="C"] { --grade: var(--grade-c); }
+.ct-grade[data-grade="D"] { --grade: var(--grade-d); }
+
+/* Medidor de LED (subnotas: afinação, tempo, ritmo). --value de 0 a 1, 10 segmentos */
+.ct-meter { display: grid; gap: var(--space-2); }
+.ct-meter__head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); }
+.ct-meter__bar {
+  --value: 0;
+  --meter-color: var(--neon-cyan);
+  height: 16px;
+  background:
+    linear-gradient(90deg, var(--meter-color) calc(var(--value) * 100%), var(--night-600) 0) 0 0 / 100% 100%;
+  -webkit-mask: repeating-linear-gradient(90deg, #000 0 calc(10% - 3px), transparent calc(10% - 3px) 10%);
+          mask: repeating-linear-gradient(90deg, #000 0 calc(10% - 3px), transparent calc(10% - 3px) 10%);
+  filter: drop-shadow(0 0 4px var(--meter-color));
+}
+.ct-meter--pitch  .ct-meter__bar { --meter-color: var(--neon-cyan); }
+.ct-meter--timing .ct-meter__bar { --meter-color: var(--neon-pink); }
+.ct-meter--rhythm .ct-meter__bar { --meter-color: var(--fret-green); }
+
+/* ── Ranking de fliperama (HIGH SCORES) ────────────────────────── */
+.ct-ranking {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-arcade);
+  font-size: var(--fs-arcade-lg);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--ls-arcade);
+  text-transform: uppercase;
+}
+.ct-ranking caption {
+  padding-bottom: var(--space-4);
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  color: var(--neon-yellow);
+  text-shadow: var(--text-glow-yellow);
+}
+.ct-ranking th {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-arcade-sm);
+  font-weight: 400;
+  color: var(--text-tertiary);
+  text-align: left;
+  border-bottom: var(--border-base) solid var(--night-600);
+}
+.ct-ranking td { padding: var(--space-3); color: var(--text-secondary); line-height: var(--lh-arcade); }
+.ct-ranking td:last-child, .ct-ranking th:last-child { text-align: right; }
+.ct-ranking tr:nth-child(1) td { color: var(--rank-1); text-shadow: 0 0 8px var(--rank-1); }
+.ct-ranking tr:nth-child(2) td { color: var(--rank-2); text-shadow: 0 0 8px var(--rank-2); }
+.ct-ranking tr:nth-child(3) td { color: var(--rank-3); text-shadow: 0 0 8px var(--rank-3); }
+.ct-ranking tr.is-you td { background: rgba(255, 46, 151, 0.12); }
+.ct-ranking tr.is-you td:first-child::before {
+  content: "▶";
+  margin-right: var(--space-2);
+  color: var(--neon-pink);
+  animation: ct-blink 0.8s var(--ease-step) infinite;
+}

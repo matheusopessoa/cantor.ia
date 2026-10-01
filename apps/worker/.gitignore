@@ -1,0 +1,6 @@
+# Python (worker). Local ao app para não conflitar com o .gitignore da raiz.
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.png

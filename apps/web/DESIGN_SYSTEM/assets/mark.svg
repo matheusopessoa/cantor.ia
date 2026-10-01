@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="cantor.ia">
+  <defs>
+    <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe14d"/>
+      <stop offset=".4" stop-color="#ff8a1f"/>
+      <stop offset=".75" stop-color="#ff2e97"/>
+      <stop offset="1" stop-color="#b26bff"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="12" fill="#0b0620"/>
+  <!-- microfone com cabeça de sol synthwave -->
+  <circle cx="32" cy="24" r="14" fill="url(#sun)"/>
+  <path d="M18 26h28M19 30h26M21 34h22" stroke="#0b0620" stroke-width="2"/>
+  <path d="M32 38v12M24 52h16" stroke="#1ff0ff" stroke-width="3" stroke-linecap="round"/>
+</svg>

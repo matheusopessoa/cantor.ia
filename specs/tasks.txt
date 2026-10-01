@@ -1,3 +1,179 @@
+MVP de nota de cantoria (0 a 10) — dividido em 4 specs, na ordem de implementação.
+
+Visão: o usuário escolhe uma música (letra sincronizada vinda do LRCLIB, API pública), cola o
+link do YouTube dela uma única vez (ou, como alternativa, faz upload do arquivo de áudio), e a
+partir desse áudio extraímos a curva de pitch da voz original (referência). Depois qualquer pessoa
+canta por cima, com fone, informando só um nome (estilo fliperama, sem login), e recebe uma nota
+0–10 = 70% afinação + 30% entrada no tempo.
+O áudio é descartado após o processamento; só as features derivadas e o id do vídeo ficam no
+banco. Para tocar a música, o áudio é baixado de novo do YouTube sob demanda e fica em cache no
+navegador (IndexedDB).
+Projeto pessoal, sem fins comerciais (decisão do usuário em 2026-09-25): o download do YouTube
+com yt-dlp viola os termos do YouTube e só é aceito nesse contexto. Se o projeto for aberto ao
+público, isso precisa ser revisto.
+Fora do MVP: acerto de letra via Whisper, tempo por palavra, instrumental, login, fila/GPU.
+
+1. sdd-001-worker-pitch — novo app `apps/worker` (Python/FastAPI): recebe um arquivo de áudio
+   ou um id de vídeo do YouTube (baixado com yt-dlp), isola a voz (Demucs), extrai a curva de
+   pitch (torchcrepe) e devolve um PitchTrack (hop de 10 ms, MIDI por frame, null quando não há
+   voz). Também devolve o áudio de um vídeo para o navegador tocar. Stateless, apaga o áudio ao
+   final.
+
+2. sdd-002-scoring — função pura em `apps/api` que recebe PitchTrack de referência, PitchTrack
+   cantado e as linhas do LRC e devolve a nota: afinação em cents ignorando oitava, com
+   compensação de tom e tolerância de tempo; entrada no tempo por linha. Sem rota, sem banco.
+
+3. sdd-003-api-songs — rotas em `apps/api`: busca no LRCLIB, cadastro de música, referência a
+   partir de link do YouTube ou upload de arquivo (processamento assíncrono no worker), proxy
+   do áudio do YouTube para tocar, leitura da referência, envio de performance (nome do
+   jogador + curva cantada → nota) e ranking top 10 por música. Models Prisma `Song` e
+   `Performance`.
+
+4. sdd-004-web-karaoke — telas em `apps/web`: busca, preparação da música (link do YouTube ou
+   upload, status, nome, ranking), karaokê (música no fone, letra sincronizada, pitch ao vivo)
+   e resultado.
+
+---
+
+5. sdd-005-design-system — refatoração completa de `apps/web/DESIGN_SYSTEM/`: troca o DS
+   "Atrito" (monocromático, app de detox) pelo cantor.ia Design System, com visual inspirado em
+   anos 80, fliperama e Guitar Hero (a inspiração não aparece em texto da interface). Tokens,
+   componentes CSS `ct-*` para todas as telas do MVP (inclusive o fluxo do YouTube), ponte
+   Tailwind 4, vitrine e readme. Não integra no `apps/web` (isso é da sdd-004).
+   Implementado em 2026-09-25, antes da sdd-004.
+
+---
+
+6. sdd-006-env-config — padrão de nomes das variáveis de ambiente e um único `.env` na raiz
+   (catálogo versionado em `.env.example`, `pnpm env:init` gera os segredos). Cada app carrega
+   a raiz e valida só as suas variáveis; o compose repassa a cada container só o que é dele.
+   Implementar antes das sdd-001…004, que adicionam variáveis seguindo esse padrão.
+
+---
+
+7. sdd-007-lyrics-alignment — alinhar automaticamente a letra (LRC do LRCLIB) ao áudio que
+   toca. Problema (usuário, 2026-09-25): a letra foi cronometrada em outra gravação; o slider
+   manual de ±2 s só corrige um deslocamento global pequeno e não resolve intro diferente (a
+   API aceita até 10 s de diferença de duração), andamento diferente (o erro cresce ao longo da
+   música) nem linhas fora do lugar. "Está impossível reconciliar manualmente."
+   Solução: na API, quando a referência fica READY, casar os inícios de linha do LRC com os
+   inícios de frase da referência de pitch (frames com voz): estimar o deslocamento global por
+   varredura (−12 s a +12 s), a deriva de andamento por regressão robusta e encaixar cada linha
+   no onset mais próximo, garantindo ordem crescente. Persistir a letra alinhada no Song e
+   devolvê-la no SongDto; a nota e o web passam a usar a letra alinhada, e o slider vira ajuste
+   fino. Função pura e testável com referência sintética. Fora do escopo: alinhamento por
+   transcrição (Whisper) para versões com estrutura diferente (fica como sdd futura).
+
+---
+
+8. sdd-008-youtube-suggestion — sugerir sozinho o vídeo do YouTube da música, para o usuário
+   não precisar procurar nem correr o risco de colar a versão errada (pedido do usuário,
+   2026-09-25: "é bom que o algoritmo já busque no YouTube a oficial relacionada"). O worker
+   ganha uma busca com yt-dlp (`ytsearch`, sem baixar nada, sem chave de API); a API monta a
+   consulta a partir de artista + título, descarta o que não tem a duração da letra (±10 s) e
+   ranqueia em duas camadas: primeiro o oficial (canal "- Topic", "official audio", canal do
+   artista); quando não existe oficial, o vídeo com mais visualizações entre os que têm a
+   duração certa (ajuste do usuário: "nem sempre tem o oficial"). Ao vivo, cover, remix,
+   karaokê e instrumental são rebaixados. O web mostra o melhor candidato com "Usar este
+   vídeo" e os demais como alternativa, mantendo o campo de colar link. Decisão do usuário:
+   sempre pedir o clique (nada de processar sozinho). Mesma ressalva do download: uso pessoal.
+
+---
+
+9. sdd-009-difficulty-levels — três dificuldades. Fácil: não mede afinação, só letra no tempo
+   (entrada de cada verso, já existe) e ritmo (cantar quando a referência tem voz e calar
+   quando não tem), 50 % cada (pedido do usuário, 2026-09-25: "não medir o tom, apenas se
+   acertou os tempos letra e ritmo"). Médio: afinação com tolerância dobrada (crédito cheio
+   até 100 cents, zero a partir de 200) e pesos 0,5 afinação / 0,25 tempo / 0,25 ritmo, porque
+   "para quem não sabe cantar bem fica dando só MISS no nível único que existe hoje". Difícil:
+   limiares de hoje (50/100 cents) com pesos 0,5 afinação / 0,5 tempo (pesos definidos pelo
+   usuário em 2026-09-25; hoje é 0,7/0,3). A performance guarda a dificuldade e o ranking passa a ser por música e
+   dificuldade. No web: escolha Fácil | Médio | Difícil na preparação (padrão Médio), feedback
+   PERFECT/GOOD/MISS com os limiares do nível, HUD com "Ritmo" e feedback ON TIME / MISS no
+   fácil, resultado com os medidores do nível. Implementar depois da sdd-007 (a letra alinhada
+   é pré-requisito de qualquer nota de tempo justa).
+
+10. sdd-010-lyrics-forced-alignment — alinhar a letra ao áudio pelo TEXTO, com IA. Pedido do
+    usuário (2026-09-26), depois de testar a sdd-007: "não deu certo. pense em outras
+    estratégias. pode até usar AI pra isso. melhorou mas ainda tenho que ajustar manualmente o
+    tempo antes de ficar bom". Diagnóstico nos dados reais: a voz isolada quase não tem pausas
+    entre linhas (trechos de 2–5 s, só 12–30 inícios de frase para 30–70 linhas), então casar
+    linha com pausa (sdd-007) alinhou 1 música em 11. Solução: alinhamento forçado (CTC) da
+    letra conhecida sobre a voz isolada, no worker, na mesma passada do Demucs, com o
+    `torchaudio.pipelines.MMS_FA` já instalado (sem dependência nova; checkpoint de 1,26 GB
+    baixado uma vez). Cada linha ganha o instante em que suas palavras são cantadas; a API
+    aceita linha a linha por pontuação e mantém o método por pausas como fallback. Flag `redo`
+    nas rotas de referência para refazer as músicas já cadastradas. Etapa 0 com go/no-go em 3
+    músicas reais; plano B (Whisper) só se o spike falhar.
+
+11. sdd-011-lyrics-from-video — escolher só o vídeo e a letra vir sozinha. Pedido do usuário
+    (2026-09-26): "acho que dá pra simplificar isso" (hoje escolhe a música duas vezes: a letra
+    no LRCLIB e depois o vídeo no YouTube) e "pegar músicas novas BR como de Tim Bernardes que o
+    LRCLIB não tem". Fluxo: a pessoa busca e escolhe o vídeo; a letra é buscada nos bastidores em
+    várias fontes (LRCLIB, aceitando letra só em texto, que hoje é recusada com
+    `SongWithoutSyncedLyricsError`; YouTube Music via `app/ytmusic.py`, letra licenciada do
+    Musixmatch); o Whisper transcreve a voz isolada e escolhe a letra que mais combina com o que
+    foi cantado (resolve letra de outra versão, como o Tempo Perdido); sem letra que combine, a
+    transcrição do Whisper vira a letra, com aviso de "letra automática". O tempo de cada verso
+    sempre vem do MMS_FA (sdd-010). Spike (scripts/transcribe_spike.py, 8 músicas, Mac ARM,
+    whisper-large-v3-turbo via mlx-whisper): WER mediano 8 %, 7–9 % em pt e en limpos, 19 % no
+    rap (Papercut, versos colados), 72 % na voz embolada (Smells Like Teen Spirit); 9–42 s por
+    música. LLM descartado (letra de memória: direitos autorais, versão errada, invenção).
+
+12. sdd-012-lyrics-review-mcp — revisar a letra das músicas pelo Claude Code, via MCP. Pedido do
+    usuário (2026-09-26): "tem como fazer um MCP entre você e o sistema? pra você corrigir
+    detalhes da letra", no lugar de um LLM pago por API (revisão automática) ou de scraping do
+    Vagalume ("o problema do scraping é a manutenção"). Contexto: na Etapa 0 da sdd-011, quando
+    nenhum site tem a letra (LRCLIB fora do ar, música sem letra no YouTube Music), a letra vira
+    a transcrição do Whisper, com erros de palavra (Christina Perri 12 %, Papercut 37 %, versos
+    colados no rap). Fluxo desejado: o usuário pede no Claude Code "revisa a letra de X"; o
+    Claude lê os versos (texto, tempo, confiança do alinhamento), a transcrição e as candidatas
+    dos sites, propõe trocas pontuais, o sistema confere cada troca no áudio (score do MMS_FA
+    antes/depois) e só grava o que o usuário aprovar, realinhando a letra. Exige: guardar a
+    transcrição e as candidatas (hoje o worker descarta), rota de edição protegida (a API não
+    tem login nessas rotas), realinhamento só da letra (sem refazer melodia e transcrição) e o
+    servidor MCP no repositório, registrado no `.mcp.json`. Limite: o Claude não escreve letra
+    inteira de memória (direitos autorais); corrige pontos com base na transcrição e nas fontes.
+
+13. sdd-013-singer-volume — controlar o volume da voz do cantor original durante o karaokê, sem
+    mexer no instrumental. Pedido do usuário (2026-09-26): "dá pra baixar um pouco o volume da
+    voz do cantor pra a gente ouvir mais nossa voz? sem baixar o volume do instrumental. Até
+    mesmo um controle pra o volume da voz do cantor durante o karaokê". Hoje o browser toca o
+    áudio inteiro do YouTube (voz + instrumental num arquivo só). Solução: o worker separa a
+    música em duas trilhas (voz e instrumental, Demucs, que ele já roda na preparação) sob
+    demanda, o browser guarda as duas no IndexedDB (o servidor continua sem guardar áudio,
+    regra 13 da sdd-003) e toca as duas sincronizadas, com um slider "Voz do cantor" antes e
+    durante a cantoria; a segunda saída (sdd do áudio em duas fontes) recebe a mistura ajustada.
+    Opção "separar na hora" (a recomendada entre as duas apresentadas; a outra era guardar as
+    trilhas no servidor), por seguir a regra de não guardar áudio; o usuário pediu o plano sem
+    escolher explicitamente.
+
+14. sdd-014-transcription-openai — transcrever a voz pela API da OpenAI para tirar peso da CPU.
+    Pedido do usuário (2026-09-26): "ficou pesado pra nossa CPU", "o mais fácil é o Whisper, faça
+    com ele". O Whisper local (sdd-011) leva 21–89 s de CPU por música. Decisões do usuário:
+    modelo `whisper-1` (único da OpenAI com tempo por palavra, que o pipeline usa) e, sem chave
+    ou com a API fora, manter o Whisper local como reserva. Chave em `OPENAI_API_KEY`, só no
+    worker.
+
+15. sdd-015-lyrics-first-search — a busca volta a ser pelo LRCLIB como caminho principal, com a
+    busca pelo vídeo (sdd-011) como alternativa. Pedido do usuário (2026-09-26): "é muito
+    complexo/arriscado voltar atrás e trazer de volta a lógica de escolher a letra com a lib e
+    depois pegar um vídeo do YouTube? era melhor antes, era mais rápido" → "isso, faça isso,
+    planeje", sobre a proposta híbrida: pela letra (LRCLIB, letra sincronizada, sem Whisper, o
+    vídeo escolhido depois na sugestão da sdd-008) por padrão; quando o LRCLIB não tiver a
+    música, "procurar pelo vídeo" (YouTube Music + Whisper, sdd-011).
+
+16. sdd-016-stems-once — rodar o Demucs uma vez só por música. Pedido do usuário (2026-09-26):
+    "e não daria pra o Demucs rodar só uma vez?" → "pode salvar os áudios numa pasta local,
+    esse negócio só vai rodar no meu PC mesmo". Hoje cada música passa duas vezes por download e
+    Demucs (preparação e karaokê, sdd-013). A preparação passa a devolver as trilhas (voz e
+    instrumental) e a API guarda numa pasta local; o karaokê toca direto delas. Derruba a regra
+    13 da sdd-003 (o servidor não guarda áudio). No mesmo plano (o usuário quis um só para toda
+    a otimização): o worker roda Demucs e MMS_FA na GPU do Mac (`WORKER_DEVICE`, MPS) — medido
+    3,7× e 2,2× mais rápido; o crepe fica em CPU (sem ganho).
+
+Pendente (ainda não planejado — virará sdd-017):
+
 Adicionar endpoint de refresh token no fluxo de autenticação da API.
 
 Contexto: hoje o login (`apps/api/src/routes/auth.routes.ts` → `authService.login` em

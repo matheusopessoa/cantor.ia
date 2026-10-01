@@ -1,0 +1,55 @@
+[project]
+name = "cantor-worker"
+version = "0.7.0"
+description = "Extrai a curva de pitch da voz de uma música (arquivo ou YouTube) para o cantor.ia"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "demucs>=4.1.0",
+    "fastapi>=0.141.1",
+    "faster-whisper>=1.2.1",
+    "httpx>=0.28.1",
+    "numpy>=2.5.3",
+    "pydantic-settings>=2.15.0",
+    "python-multipart>=0.0.32",
+    "soundfile>=0.14.0",
+    "torch>=2.14.0",
+    "torchaudio>=2.11.0",
+    "torchcrepe>=0.0.24",
+    "uvicorn[standard]>=0.54.0",
+    "yt-dlp>=2026.8.19",
+    "ytmusicapi>=1.12.3",
+]
+
+[tool.uv]
+package = false
+# Só as plataformas que rodam o worker: Mac ARM (dev) e Linux (Docker). Sem isso, o
+# demucs força torch<2.3 por causa do Mac Intel e o torchaudio novo quebra.
+environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'linux'",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: roda o Demucs de verdade (fora da suíte padrão)",
+    "network: baixa do YouTube ou chama a OpenAI de verdade (fora da suíte padrão)",
+]
+addopts = "-m 'not slow and not network'"
+
+[dependency-groups]
+dev = [
+    "matplotlib>=3.11.2",
+    "pytest>=9.1.1",
+]
+
+# R3 da sdd-001: no Linux (Docker), torch só-CPU. O wheel padrão do PyPI traz CUDA (vários GB).
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchaudio = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]

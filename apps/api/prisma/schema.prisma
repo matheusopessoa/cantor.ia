@@ -26,3 +26,119 @@ model Session {
   expiresAt    DateTime
   createdAt    DateTime @default(now())
 }
+
+/// Estado da referência de pitch de uma música (sdd-003).
+enum ReferenceStatus {
+  NONE
+  PROCESSING
+  READY
+  FAILED
+}
+
+/// Motivo de falha da referência. O web traduz cada código em mensagem
+/// (tabela "Erros da referência" no readme do design system). Nunca texto livre.
+enum ReferenceErrorCode {
+  VIDEO_UNAVAILABLE
+  TOO_LONG
+  DURATION_MISMATCH
+  NO_VOICE
+  DOWNLOAD_FAILED
+  INVALID_AUDIO
+  INTERNAL
+  /// A API reiniciou (ou caiu) no meio do processamento, que vive no processo dela: no boot,
+  /// toda música em PROCESSING vira FAILED com este código (achado da sdd-011).
+  INTERRUPTED
+}
+
+/// Música cadastrada a partir do LRCLIB. A referência de pitch é extraída uma única vez
+/// do áudio (link do YouTube ou arquivo enviado); o áudio nunca é armazenado.
+model Song {
+  id                 String              @id @default(uuid(7))
+  /// Id da faixa no LRCLIB. Só nas músicas cadastradas pela busca do LRCLIB (antes da
+  /// sdd-011), idempotentes por ele.
+  lrclibId           Int?                @unique
+  /// Vídeo escolhido na busca do YouTube Music (sdd-011): identidade das músicas novas, cadastro
+  /// idempotente por ele. Nulo nas músicas antigas. Não muda depois do cadastro (o
+  /// `youtubeVideoId` é o da tentativa de referência atual).
+  sourceVideoId      String?             @unique
+  artist             String
+  title              String
+  album              String?
+  /// Duração em ms (do LRCLIB nas músicas antigas, do YouTube Music nas novas). Referência com
+  /// mais de 10 s de diferença falha.
+  durationMs         Int
+  /// LyricLine[]. Música antiga: a letra sincronizada do LRCLIB. Música nova (sdd-011): vazia até
+  /// a primeira referência READY; depois, a letra escolhida pelo worker, com `startMs` de dica.
+  lyrics             Json
+  /// LyricsSelection (sdd-011): de onde veio a letra (lrclib, ytmusic, whisper) e o quanto cada
+  /// candidata combina com o que é cantado. Nulo nas músicas antigas e até a primeira READY.
+  lyricsSelection    Json?
+  referenceStatus    ReferenceStatus     @default(NONE)
+  /// PitchTrack (sdd-001). Pode passar de 400 KB: nunca selecionar em listas ou no SongDto.
+  referenceTrack     Json?
+  /// Vídeo da tentativa atual ou da referência pronta; permite mostrar a miniatura e baixar o
+  /// áudio para tocar. Nulo se veio de upload ou se a tentativa pelo YouTube falhou.
+  youtubeVideoId     String?
+  referenceError     ReferenceErrorCode?
+  /// Duração do áudio da última tentativa (preenche a mensagem de DURATION_MISMATCH).
+  referenceAudioMs   Int?
+  /// LyricLine[] alinhada ao áudio da referência atual (sdd-007). Nulo até READY ou quando
+  /// o alinhamento não bateu (matchedRatio < 0.5): consumidores usam `lyrics`.
+  alignedLyrics      Json?
+  /// { aligned, shiftMs, matchedRatio } — diagnóstico do alinhamento (sdd-007). Nulo enquanto
+  /// a referência não está READY (claim e FAILED zeram) ou em músicas anteriores à sdd-007.
+  lyricsAlignment    Json?
+  /// Última transição de status. PROCESSING há mais de 15 min é tratado como abandonado.
+  referenceUpdatedAt DateTime?
+  /// LyricsEvidence (sdd-012): a transcrição do Whisper e as letras candidatas da última
+  /// referência de uma música nova, para a revisão da letra pelo MCP. Nunca vai para o SongDto;
+  /// claim e FAILED zeram.
+  lyricsEvidence     Json?
+  /// Versão da letra (sdd-012): incrementa a cada READY e a cada revisão aplicada. A revisão só
+  /// grava se a versão não mudou desde a conferência (sem sobrescrever um redo no meio).
+  lyricsRevision     Int                 @default(0)
+  /// Trilhas (voz e instrumental) da referência atual, guardadas na pasta local
+  /// `SONG_STEMS_DIR/<id>/<stemsKey>/` (sdd-016). Nulo sem trilhas: músicas antigas, em
+  /// PROCESSING/FAILED, ou se gravar falhou. Muda a cada referência nova (claim zera).
+  stemsKey           String?
+  createdAt          DateTime            @default(now())
+  performances       Performance[]
+}
+
+/// Nível da nota (sdd-009). Rankings são por música e nível. Performances anteriores à
+/// migration recebem HARD (limiares de afinação iguais), mas foram avaliadas com os pesos
+/// antigos (0,7/0,3) e não são recalculadas.
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+/// Uma cantoria. Sem login: o jogador informa só o nome (estilo fliperama). Nomes não são
+/// únicos.
+model Performance {
+  id          String     @id @default(uuid(7))
+  songId      String
+  song        Song       @relation(fields: [songId], references: [id], onDelete: Cascade)
+  playerName  String
+  /// Nível em que a nota foi calculada (sdd-009). Não muda depois de gravada.
+  difficulty  Difficulty @default(HARD)
+  /// Nota final 0..10 (scoringService), com os pesos do nível.
+  score       Float
+  pitchScore  Float
+  timingScore Float
+  /// 0..10: cantou quando a referência tem voz e calou quando não tem (sdd-009). Conta no
+  /// EASY e no MEDIUM.
+  rhythmScore Float      @default(0)
+  /// Ajuste manual da letra enviado pelo jogador, em ms.
+  offsetMs    Int        @default(0)
+  /// { keyOffsetSemitones, coverage, lines } — detalhes do ScoreResult.
+  details     Json
+  /// PitchTrack cantado (só pitch, não é áudio): usado para recalibrar a nota. Nunca sai
+  /// em nenhuma rota.
+  sungTrack   Json
+  createdAt   DateTime   @default(now())
+
+  /// Ranking por música e nível: score desc; o rank é um count sobre este índice.
+  @@index([songId, difficulty, score(sort: Desc)])
+}

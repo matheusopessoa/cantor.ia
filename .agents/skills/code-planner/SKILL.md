@@ -16,7 +16,7 @@ não em código.
 - Performance, queries N+1, cache e concorrência (ex.: `prisma.$transaction`) são critérios
   implícitos de todo plano.
 - **Rastreabilidade obrigatória**: toda decisão cita `apps/api/docs/arquitetura.md` (API) ou o
-  design system em `apps/web/DESIGN_SYSTEM/_ds/*/readme.md` (UI), ou o arquivo de código que a
+  design system em `apps/web/DESIGN_SYSTEM/readme.md` (UI), ou o arquivo de código que a
   justifica (`caminho:linha`).
 - **Questione gaps antes de avançar.** Código prevalece sobre documentação: confirme no código
   antes de afirmar como algo funciona hoje.

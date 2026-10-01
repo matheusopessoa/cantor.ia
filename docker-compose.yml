@@ -7,10 +7,29 @@ services:
       dockerfile: apps/api/Dockerfile
     ports:
       - "3333:3333"
+    environment:
+      # Trilhas guardadas (sdd-016): a pasta precisa sobreviver ao container (volume abaixo).
+      SONG_STEMS_DIR: /data/stems
+    volumes:
+      - ./.data/stems:/data/stems
 
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
     ports:
-      - "3000:3000"
+      # Host 5173 (mesma porta do `pnpm dev`); dentro do container o Next escuta na 3000.
+      - "5173:3000"
+
+  # Extração de pitch (Python). A porta fica exposta só para desenvolvimento; a API fala com
+  # ele por http://worker:8000 (WORKER_URL, definido nos compose de dev e prod).
+  worker:
+    build:
+      context: apps/worker
+    environment:
+      # Opcional (sdd-014): transcrição pela OpenAI (`whisper-1`); vazia usa o Whisper local.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # Device dos modelos (sdd-016): no container (Linux) `auto` resolve `cpu`.
+      WORKER_DEVICE: ${WORKER_DEVICE:-auto}
+    ports:
+      - "8000:8000"

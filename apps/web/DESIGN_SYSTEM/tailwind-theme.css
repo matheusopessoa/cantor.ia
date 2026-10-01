@@ -1,0 +1,58 @@
+/* Ponte Tailwind 4 → tokens do design system.
+   Uso em apps/web/app/globals.css (depois de importar styles.css e tailwindcss):
+     @import "../DESIGN_SYSTEM/tailwind-theme.css";
+   Gera utilitários como bg-surface, text-neon-pink, font-hud, shadow-glow-cyan.
+   Em componentes, prefira as classes ct-* e os utilitários abaixo. Nunca use hex cru. */
+
+@theme inline {
+  --color-page:      var(--bg-page);
+  --color-sunken:    var(--bg-sunken);
+  --color-surface:   var(--bg-surface);
+  --color-raised:    var(--bg-raised);
+
+  --color-fg:        var(--text-primary);
+  --color-fg-2:      var(--text-secondary);
+  --color-fg-3:      var(--text-tertiary);
+  --color-fg-off:    var(--text-disabled);
+  --color-on-neon:   var(--text-on-neon);
+
+  --color-line:        var(--border-default);
+  --color-line-subtle: var(--border-subtle);
+  --color-line-strong: var(--border-strong);
+
+  --color-neon-pink:   var(--neon-pink);
+  --color-neon-cyan:   var(--neon-cyan);
+  --color-neon-yellow: var(--neon-yellow);
+  --color-neon-purple: var(--neon-purple);
+  --color-neon-orange: var(--neon-orange);
+
+  --color-fret-green:  var(--fret-green);
+  --color-fret-red:    var(--fret-red);
+  --color-fret-yellow: var(--fret-yellow);
+  --color-fret-blue:   var(--fret-blue);
+  --color-fret-orange: var(--fret-orange);
+
+  --color-success: var(--status-success);
+  --color-warning: var(--status-warning);
+  --color-danger:  var(--status-danger);
+  --color-info:    var(--status-info);
+
+  /* nomes diferentes dos tokens do DS para não criar referência circular */
+  --font-marquee: var(--font-display);   /* font-marquee */
+  --font-hud:     var(--font-arcade);    /* font-hud */
+  --font-digits:  var(--font-score);     /* font-digits (só números) */
+  --font-sans:    var(--font-body);
+
+  --radius-chip:  var(--radius-sm);
+  --radius-btn:   var(--radius-md);
+  --radius-stage: var(--radius-lg);
+
+  --shadow-glow-pink:   var(--glow-pink);
+  --shadow-glow-cyan:   var(--glow-cyan);
+  --shadow-glow-yellow: var(--glow-yellow);
+  --shadow-glow-purple: var(--glow-purple);
+  --shadow-key:         var(--shadow-press);
+
+  --ease-punch: var(--ease-out);
+  --ease-pop:   var(--ease-snap);
+}

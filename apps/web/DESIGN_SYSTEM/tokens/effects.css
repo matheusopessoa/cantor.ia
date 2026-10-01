@@ -1,0 +1,39 @@
+/* cantor.ia — brilho neon, sombras e texturas de CRT.
+   O brilho é a "elevação" do sistema: quanto mais importante, mais acende.
+   Hierarquia: repouso = sem brilho · interativo = brilho suave · ativo/foco = brilho forte. */
+
+:root {
+  /* Brilho de caixa (box-shadow) */
+  --glow-pink:   0 0 2px #ff2e97, 0 0 10px rgba(255, 46, 151, 0.55), 0 0 28px rgba(255, 46, 151, 0.30);
+  --glow-cyan:   0 0 2px #1ff0ff, 0 0 10px rgba(31, 240, 255, 0.50), 0 0 28px rgba(31, 240, 255, 0.28);
+  --glow-yellow: 0 0 2px #ffe14d, 0 0 10px rgba(255, 225, 77, 0.50), 0 0 28px rgba(255, 225, 77, 0.28);
+  --glow-purple: 0 0 2px #b26bff, 0 0 10px rgba(178, 107, 255, 0.45), 0 0 24px rgba(178, 107, 255, 0.25);
+  --glow-green:  0 0 2px #2bff88, 0 0 10px rgba(43, 255, 136, 0.50), 0 0 28px rgba(43, 255, 136, 0.28);
+  --glow-red:    0 0 2px #ff4766, 0 0 10px rgba(255, 71, 102, 0.50), 0 0 28px rgba(255, 71, 102, 0.28);
+  --glow-soft:   0 0 16px rgba(178, 107, 255, 0.18);
+
+  /* Brilho de texto (text-shadow) — só em display/arcade, nunca em corpo de texto */
+  --text-glow-pink:   0 0 6px rgba(255, 46, 151, 0.85), 0 0 20px rgba(255, 46, 151, 0.45);
+  --text-glow-cyan:   0 0 6px rgba(31, 240, 255, 0.80), 0 0 20px rgba(31, 240, 255, 0.40);
+  --text-glow-yellow: 0 0 6px rgba(255, 225, 77, 0.85), 0 0 22px rgba(255, 225, 77, 0.45);
+  --text-glow-purple: 0 0 6px rgba(178, 107, 255, 0.85), 0 0 20px rgba(178, 107, 255, 0.40);
+
+  /* Sombra "de fliperama": bloco sólido deslocado (botões físicos) */
+  --shadow-press:        0 4px 0 var(--night-950);
+  --shadow-press-active: 0 1px 0 var(--night-950);
+  --shadow-panel:        0 12px 40px rgba(7, 3, 26, 0.6);
+
+  /* Texturas de CRT */
+  --scanlines: repeating-linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.035) 0px,
+    rgba(255, 255, 255, 0.035) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  --vignette: radial-gradient(ellipse at center, transparent 55%, rgba(7, 3, 26, 0.75) 100%);
+
+  /* Grade do horizonte synthwave */
+  --horizon-grid-color: rgba(255, 46, 151, 0.55);
+  --horizon-grid-size:  48px;
+}

@@ -4,15 +4,30 @@ Monorepo pnpm com:
 
 - [`apps/api`](apps/api) — API em Fastify + Prisma (Postgres), validação com Zod, testes com Vitest.
 - [`apps/web`](apps/web) — frontend em Next.js 16 (App Router) + React 19 + Tailwind CSS 4.
+- [`apps/worker`](apps/worker) — serviço Python (FastAPI + `uv`, fora do pnpm) que extrai a melodia da voz, escolhe e alinha a letra.
+- [`apps/mcp`](apps/mcp) — servidor MCP (stdio) para o Claude Code revisar a letra das músicas pela API (registrado no `.mcp.json`).
 
 ## Começando
 
 ```bash
 pnpm install
-docker compose -f docker-compose.dev.yml up -d   # Postgres de dev (porta 5432)
-pnpm --filter api dev                            # API em http://localhost:3333
-pnpm --filter web dev                            # Web em http://localhost:3000
+pnpm env:init                                    # cria o .env da raiz e gera os segredos
+pnpm dev                                         # sobe tudo: Postgres (Docker), API :3333, web :5173 e worker :8000
 ```
+
+`pnpm dev` mata processos presos nessas portas antes de subir; Ctrl+C derruba os serviços e
+`pnpm dev:stop` também para o banco. `pnpm dev --no-worker` pula o worker. Para subir cada
+peça separadamente:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db   # Postgres de dev (porta 5432)
+pnpm --filter api dev                            # API em http://localhost:3333
+pnpm --filter web dev                            # Web em http://localhost:5173
+```
+
+Todas as variáveis de ambiente ficam num único `.env` na raiz. O catálogo, com o que cada uma
+faz, é o [`.env.example`](.env.example); a convenção de nomes está em
+[`AGENTS.md` §11](AGENTS.md#11-dependências-externas).
 
 Testes e lint:
 
@@ -32,7 +47,7 @@ A lista completa de comandos está em [`AGENTS.md`](AGENTS.md#1-comandos-do-proj
 | Documento | Consulte quando... |
 |---|---|
 | [`apps/api/docs/arquitetura.md`](apps/api/docs/arquitetura.md) | precisar entender as camadas da API, o fluxo de requisição ou como adicionar um recurso novo. |
-| [`apps/web/DESIGN_SYSTEM/_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/readme.md`](apps/web/DESIGN_SYSTEM/_ds/atrito-design-system-04edc5c1-a31d-4888-8128-74e5cb671bb0/readme.md) | for tocar em tokens, componentes ou padrões visuais do frontend. |
+| [`apps/web/DESIGN_SYSTEM/readme.md`](apps/web/DESIGN_SYSTEM/readme.md) | for tocar em tokens, componentes ou padrões visuais do frontend. |
 | [`apps/web/AGENTS.md`](apps/web/AGENTS.md) | for gerar código Next.js — contém avisos sobre a versão do Next.js usada no projeto. |
 
 A fonte de verdade é o **código-fonte**. Este `README.md` é apenas um resumo. Documentos de regras
